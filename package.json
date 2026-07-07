@@ -1,0 +1,9 @@
+{
+  "name": "blockclub-newsletter-builder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Staff tool: paste story links, get a draft ActiveCampaign newsletter with headlines and lead images pulled from blockclubchicago.org.",
+  "engines": {
+    "node": ">=18"
+  }
+}
