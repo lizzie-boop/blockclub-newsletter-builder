@@ -59,25 +59,6 @@ If ActiveCampaign has changed this behavior since, the error message returned
 by the function will include AC's actual response — that's the fastest way to
 diagnose what changed.
 
-## Planned: ad-team companion tool
-
-A second interface is planned that lets the ad team open a draft created here
-and insert advertiser content (text, image, link). To keep the two tools from
-conflicting:
-
-- The generated HTML includes `<!-- AD-SLOT-0 -->` through `<!-- AD-SLOT-N -->`
-  comments — one above the first story, one between each pair of stories, one
-  at the end. The ad tool should locate these via `GET /api/3/messages/:id`
-  (or `campaigns/:id/campaignMessage`) and replace the marker text with ad
-  HTML via `PUT /api/3/messages/:id`, leaving everything else in the `html`
-  field untouched.
-- `create-campaign.js` returns `messageId` and `adSlotCount` — the ad tool
-  will need a way to look up the right `messageId` for a given campaign name
-  later. Not yet solved: whether that's a shared log/database the ad tool
-  reads from, or whether staff just paste in the campaign name and the ad
-  tool looks it up live via ActiveCampaign's own search. Worth deciding before
-  building tool #2.
-
 ## Files
 
 - `index.html` — the staff-facing page
