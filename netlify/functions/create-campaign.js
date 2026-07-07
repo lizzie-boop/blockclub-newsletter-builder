@@ -1,25 +1,17 @@
 // netlify/functions/create-campaign.js
 //
 // Takes a campaign name + a list of resolved stories, and:
-//   1. Builds an HTML email body (simple, stacked story-preview blocks)
+//   1. Builds the newsletter HTML — either our own default design, or (if a
+//      templateId is provided) merges content into one of your custom
+//      ActiveCampaign templates.
 //   2. Creates a Message in ActiveCampaign (POST /api/3/messages) — v3, documented, stable.
 //   3. Creates a draft Campaign attached to that message + your list, via
 //      ActiveCampaign's v1 API (admin/api.php?api_action=campaign_create).
 //
-//      Why v1 for this one step: AC's v3 endpoint (POST /api/3/campaign)
-//      only accepts a small whitelist of fields on creation — testing showed
-//      `type`/`name` are accepted but `status`, `public`, `sdate`, and the
-//      list/message association keys are all rejected as "not allowed".
-//      List/message attachment for campaign creation isn't documented on v3.
-//      AC's v1 API is still fully supported and has official examples for
-//      exactly this operation, so campaign creation goes through v1 while
-//      message creation (cleanly documented on v3) stays on v3. Both use the
-//      same API URL + API key.
-//
 // Required environment variables (set in Netlify site settings):
 //   AC_API_URL     e.g. https://youraccountname.api-us1.com
 //   AC_API_KEY     Your ActiveCampaign API key
-//   AC_LIST_ID     The numeric ID of the list this newsletter sends to (fallback default)
+//   AC_LIST_ID     Fallback list ID if none is selected in the dropdown
 //   AC_FROM_NAME   e.g. "Block Club Chicago"
 //   AC_FROM_EMAIL  e.g. "newsletter@blockclubchicago.org"
 //   AC_REPLY_TO    e.g. "newsletter@blockclubchicago.org"
@@ -31,6 +23,13 @@ function escapeHtml(str = '') {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+function truncate(str = '', maxLen) {
+  if (!str) return '';
+  return str.length > maxLen ? str.slice(0, maxLen - 1).trim() + '…' : str;
+}
+
+// ---------- Default built-in design (used when no template is selected) ----------
 
 function buildStoryBlockHtml(story) {
   const headline = escapeHtml(story.headline);
@@ -78,7 +77,7 @@ function buildIntroHtml(introText) {
   `;
 }
 
-function buildNewsletterHtml(campaignName, introText, stories) {
+function buildDefaultNewsletterHtml(campaignName, introText, stories) {
   const storyBlocksWithSlots = stories
     .map((story, i) => `<!-- AD-SLOT-${i} -->\n${buildStoryBlockHtml(story)}`)
     .join('\n');
@@ -115,6 +114,81 @@ function buildNewsletterText(campaignName, introText, stories) {
   const intro = introText ? `${introText}\n\n` : '';
   return `${campaignName}\n\n${intro}${lines.join('\n')}`;
 }
+
+// ---------- Template merge (used when a templateId is provided) ----------
+//
+// This is tailored to the specific Block Club "neighborhood newsletter"
+// template structure we inspected: a lorem-ipsum intro paragraph, a
+// repeated "NEIGHBORHOOD" story block (image + headline + subhed), and a
+// separate SPONSORED ad block that we leave untouched.
+//
+// If your other templates have a different structure, this merge logic
+// will need matching adjustments — the placeholder text it looks for is
+// specific to this one template.
+
+const TEMPLATE_INTRO_LOREM =
+  "Introduction here.&nbsp;Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.<br><br>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum..<br><br>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+
+const TEMPLATE_FILLER_HEADLINE =
+  '<a target="_blank" href="fakeblockclublink.com" style="color: #000000;">This Is a Filler Headline That We Should Apply The Style Of Heading 2 To</a>';
+
+const TEMPLATE_FILLER_SUBHED =
+  '<h3>This is a filler subhed that we should apply the style of Heading 3 to.&nbsp;This is a filler subhed that we should apply the style of Heading 3 to.</h3>';
+
+const TEMPLATE_FILLER_IMAGE_REGEX =
+  /<img class="adapt-img" src="[^"]*e9a7844f-1ae1-4e33-9a93-20f590679b28[^"]*"[\s\S]*?>/g;
+
+function mergeIntoTemplate(templateHtml, templateCss, introText, stories) {
+  let html = templateHtml;
+
+  // 1. Intro / topper — replace the lorem ipsum body, keep greeting + sign-off.
+  const introReplacement = introText
+    ? escapeHtml(introText).replace(/\n/g, '<br>')
+    : '';
+  html = html.split(TEMPLATE_INTRO_LOREM).join(introReplacement);
+
+  // 2. Story slots — fill in sequentially. If there are more stories than
+  //    slots, extras are silently dropped here; the caller reports this.
+  let headlineIdx = 0;
+  html = html.split(TEMPLATE_FILLER_HEADLINE).reduce((acc, segment, i, arr) => {
+    if (i === arr.length - 1) return acc + segment;
+    const story = stories[headlineIdx];
+    headlineIdx++;
+    const replacement = story
+      ? `<a target="_blank" href="${escapeHtml(story.link)}" style="color: #000000;">${escapeHtml(story.headline)}</a>`
+      : TEMPLATE_FILLER_HEADLINE;
+    return acc + segment + replacement;
+  }, '');
+  const headlineSlotCount = headlineIdx;
+
+  let subhedIdx = 0;
+  html = html.split(TEMPLATE_FILLER_SUBHED).reduce((acc, segment, i, arr) => {
+    if (i === arr.length - 1) return acc + segment;
+    const story = stories[subhedIdx];
+    subhedIdx++;
+    const replacement = story
+      ? `<h3>${escapeHtml(truncate(story.excerpt || '', 140))}</h3>`
+      : TEMPLATE_FILLER_SUBHED;
+    return acc + segment + replacement;
+  }, '');
+
+  let imageIdx = 0;
+  html = html.replace(TEMPLATE_FILLER_IMAGE_REGEX, (match) => {
+    const story = stories[imageIdx];
+    imageIdx++;
+    if (!story || !story.image) return match;
+    return `<img class="adapt-img" src="${escapeHtml(story.image)}" alt="${escapeHtml(story.headline)}" style="display:block;width:100%;max-width:245px;" width="245">`;
+  });
+
+  // 3. Inject the template's CSS into <head> so it actually applies.
+  if (templateCss) {
+    html = html.replace('</head>', `<style type="text/css">${templateCss}</style></head>`);
+  }
+
+  return { html, slotCount: headlineSlotCount };
+}
+
+// ---------- ActiveCampaign API helpers ----------
 
 async function acRequest(path, { method = 'GET', body } = {}) {
   const baseUrl = process.env.AC_API_URL;
@@ -190,9 +264,9 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  let campaignName, introText, listId, stories;
+  let campaignName, introText, listId, templateId, stories;
   try {
-    ({ campaignName, introText, listId, stories } = JSON.parse(event.body));
+    ({ campaignName, introText, listId, templateId, stories } = JSON.parse(event.body));
   } catch {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
@@ -210,7 +284,25 @@ exports.handler = async (event) => {
   }
 
   try {
-    const html = buildNewsletterHtml(campaignName, introText, stories);
+    let html;
+    let slotWarning = null;
+
+    if (templateId) {
+      const templateRes = await acRequest(`templates/${encodeURIComponent(templateId)}`);
+      const rawContent = templateRes.template?.content;
+      if (!rawContent) {
+        throw new Error('Selected template has no content field to merge into');
+      }
+      const { html: templateHtml, css: templateCss } = JSON.parse(rawContent);
+      const merged = mergeIntoTemplate(templateHtml, templateCss, introText, stories);
+      html = merged.html;
+      if (stories.length > merged.slotCount) {
+        slotWarning = `This template has ${merged.slotCount} story slot${merged.slotCount === 1 ? '' : 's'}, but ${stories.length} stories were provided. Only the first ${merged.slotCount} were placed — the rest were not included.`;
+      }
+    } else {
+      html = buildDefaultNewsletterHtml(campaignName, introText, stories);
+    }
+
     const text = buildNewsletterText(campaignName, introText, stories);
 
     const messageRes = await acRequest('messages', {
@@ -248,8 +340,8 @@ exports.handler = async (event) => {
         success: true,
         campaignName,
         messageId,
-        adSlotCount: stories.length + 1,
         campaign: campaignRes,
+        slotWarning,
       }),
     };
   } catch (err) {
