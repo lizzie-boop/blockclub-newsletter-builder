@@ -155,6 +155,11 @@
   </div>
 
   <div class="field">
+    <label for="introText">Newsletter intro (optional)</label>
+    <textarea id="introText" placeholder="A sentence or two to open the newsletter. Leave blank to skip." style="min-height:80px;"></textarea>
+  </div>
+
+  <div class="field">
     <label for="links">Story links</label>
     <textarea id="links" placeholder="https://blockclubchicago.org/2026/07/07/example-story/&#10;https://blockclubchicago.org/2026/07/06/another-story/"></textarea>
     <div class="hint">One link per line, in the order you want them to appear.</div>
@@ -222,6 +227,7 @@ function cardPlaceholder(text) {
 
 buildBtn.addEventListener('click', async () => {
   const campaignName = document.getElementById('campaignName').value.trim();
+  const introText = document.getElementById('introText').value.trim();
   const rawLinks = document.getElementById('links').value
     .split('\n')
     .map(l => l.trim())
@@ -277,7 +283,7 @@ buildBtn.addEventListener('click', async () => {
     const res = await fetch('/.netlify/functions/create-campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ campaignName, stories: resolved }),
+      body: JSON.stringify({ campaignName, introText, stories: resolved }),
     });
     const data = await res.json();
 
