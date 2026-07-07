@@ -4,7 +4,7 @@
 //   1. Builds an HTML email body (simple, stacked story-preview blocks)
 //   2. Creates a Message in ActiveCampaign (POST /api/3/messages) — documented, stable.
 //   3. Creates a draft Campaign attached to that message + your list
-//      (POST /api/3/campaigns) — NOTE: this endpoint is not in AC's current
+//      (POST /api/3/campaign) — NOTE: this endpoint is not in AC's current
 //      public docs for list/message association. It still expects the old
 //      v1-style array params (list[ID], p[ID], m[MESSAGE_ID]) even though
 //      the request itself goes through the v3 API. This is a known quirk,
@@ -197,7 +197,7 @@ exports.handler = async (event) => {
       [`m[${messageId}]`]: 100,
     };
 
-    const campaignRes = await acRequest('campaigns', {
+    const campaignRes = await acRequest('campaign', {
       method: 'POST',
       isForm: true,
       body: toFormBody(formParams),
