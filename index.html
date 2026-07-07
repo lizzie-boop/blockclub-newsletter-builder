@@ -48,7 +48,7 @@
     color: var(--muted);
     margin-bottom: 6px;
   }
-  input[type="text"], textarea {
+  input[type="text"], textarea, select {
     width: 100%;
     font-size: 16px;
     font-family: inherit;
@@ -155,6 +155,22 @@
   </div>
 
   <div class="field">
+    <label for="listSelect">Send to list</label>
+    <select id="listSelect"><option>Loading lists…</option></select>
+  </div>
+
+  <div class="field">
+    <label for="templateSelect">Template (optional, in testing)</label>
+    <select id="templateSelect"><option value="">Use default design</option></select>
+    <div class="hint">
+      Template selection isn't wired into newsletter creation yet — pick one here to preview its raw HTML below, so we can figure out how to merge content into it.
+    </div>
+    <div id="templatePreviewWrap" style="display:none;margin-top:10px;">
+      <textarea id="templatePreview" readonly style="min-height:160px;font-family:monospace;font-size:12px;background:#f7f7f5;"></textarea>
+    </div>
+  </div>
+
+  <div class="field">
     <label for="introText">Newsletter Topper</label>
     <textarea id="introText" placeholder="Write or paste your topper here. If submitting without a topper, please leave this blank, and follow up with Hannah or your editor" style="min-height:80px;"></textarea>
   </div>
@@ -177,11 +193,76 @@ const buildBtn = document.getElementById('buildBtn');
 const statusEl = document.getElementById('status');
 const storiesEl = document.getElementById('stories');
 const resultEl = document.getElementById('result');
+const listSelect = document.getElementById('listSelect');
+const templateSelect = document.getElementById('templateSelect');
+const templatePreviewWrap = document.getElementById('templatePreviewWrap');
+const templatePreview = document.getElementById('templatePreview');
 
 function setStatus(msg, kind) {
   statusEl.textContent = msg;
   statusEl.className = kind || '';
 }
+
+// --- Populate lists dropdown on load ---
+async function loadLists() {
+  try {
+    const res = await fetch('/.netlify/functions/list-lists');
+    const data = await res.json();
+    if (!res.ok || !data.lists) {
+      listSelect.innerHTML = `<option value="">Could not load lists</option>`;
+      return;
+    }
+    listSelect.innerHTML = data.lists
+      .map((l) => `<option value="${l.id}">${l.name}</option>`)
+      .join('');
+  } catch (err) {
+    listSelect.innerHTML = `<option value="">Could not load lists</option>`;
+  }
+}
+
+// --- Populate templates dropdown on load ---
+async function loadTemplates() {
+  try {
+    const res = await fetch('/.netlify/functions/list-templates');
+    const data = await res.json();
+    if (!res.ok || !data.templates) return;
+    if (data.templates.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No API-readable templates found';
+      templateSelect.appendChild(opt);
+      return;
+    }
+    data.templates.forEach((t) => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name;
+      templateSelect.appendChild(opt);
+    });
+  } catch (err) {
+    // Silent fail — template selection is optional/in-testing.
+  }
+}
+
+templateSelect.addEventListener('change', async () => {
+  const id = templateSelect.value;
+  if (!id) {
+    templatePreviewWrap.style.display = 'none';
+    return;
+  }
+  templatePreviewWrap.style.display = 'block';
+  templatePreview.value = 'Loading template HTML…';
+  try {
+    const res = await fetch(`/.netlify/functions/get-template?id=${encodeURIComponent(id)}`);
+    const data = await res.json();
+    templatePreview.value = data.content || data.error || '(empty)';
+  } catch (err) {
+    templatePreview.value = `Error loading template: ${err.message}`;
+  }
+});
+
+loadLists();
+loadTemplates();
 
 function renderStoryCard(id, url) {
   const card = document.createElement('div');
@@ -228,6 +309,7 @@ function cardPlaceholder(text) {
 buildBtn.addEventListener('click', async () => {
   const campaignName = document.getElementById('campaignName').value.trim();
   const introText = document.getElementById('introText').value.trim();
+  const listId = listSelect.value;
   const rawLinks = document.getElementById('links').value
     .split('\n')
     .map(l => l.trim())
@@ -239,6 +321,10 @@ buildBtn.addEventListener('click', async () => {
 
   if (!campaignName) {
     setStatus('Give the campaign a name first.', 'error');
+    return;
+  }
+  if (!listId) {
+    setStatus('Choose a list to send to.', 'error');
     return;
   }
   if (rawLinks.length === 0) {
@@ -283,7 +369,7 @@ buildBtn.addEventListener('click', async () => {
     const res = await fetch('/.netlify/functions/create-campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ campaignName, introText, stories: resolved }),
+      body: JSON.stringify({ campaignName, introText, listId, stories: resolved }),
     });
     const data = await res.json();
 

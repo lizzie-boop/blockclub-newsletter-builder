@@ -19,7 +19,7 @@
 // Required environment variables (set in Netlify site settings):
 //   AC_API_URL     e.g. https://youraccountname.api-us1.com
 //   AC_API_KEY     Your ActiveCampaign API key
-//   AC_LIST_ID     The numeric ID of the list this newsletter sends to
+//   AC_LIST_ID     The numeric ID of the list this newsletter sends to (fallback default)
 //   AC_FROM_NAME   e.g. "Block Club Chicago"
 //   AC_FROM_EMAIL  e.g. "newsletter@blockclubchicago.org"
 //   AC_REPLY_TO    e.g. "newsletter@blockclubchicago.org"
@@ -190,9 +190,9 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  let campaignName, introText, stories;
+  let campaignName, introText, listId, stories;
   try {
-    ({ campaignName, introText, stories } = JSON.parse(event.body));
+    ({ campaignName, introText, listId, stories } = JSON.parse(event.body));
   } catch {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
@@ -204,9 +204,9 @@ exports.handler = async (event) => {
     };
   }
 
-  const listId = process.env.AC_LIST_ID;
+  listId = listId || process.env.AC_LIST_ID;
   if (!listId) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'Missing AC_LIST_ID environment variable' }) };
+    return { statusCode: 500, body: JSON.stringify({ error: 'No list selected and no AC_LIST_ID environment variable set' }) };
   }
 
   try {
