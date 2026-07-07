@@ -2,14 +2,19 @@
 //
 // Takes a campaign name + a list of resolved stories, and:
 //   1. Builds an HTML email body (simple, stacked story-preview blocks)
-//   2. Creates a Message in ActiveCampaign (POST /api/3/messages) — documented, stable.
-//   3. Creates a draft Campaign attached to that message + your list
-//      (POST /api/3/campaign) — NOTE: list/message attachment via this
-//      endpoint isn't in AC's current public docs. It uses legacy-style
-//      bracket keys (list[ID], p[ID], m[MESSAGE_ID]) sent as JSON object
-//      keys. This is a known quirk, confirmed via ActiveCampaign's own
-//      example + community reports, not an official v3 spec. Test against
-//      a real (non-production) list before trusting this in production.
+//   2. Creates a Message in ActiveCampaign (POST /api/3/messages) — v3, documented, stable.
+//   3. Creates a draft Campaign attached to that message + your list, via
+//      ActiveCampaign's v1 API (admin/api.php?api_action=campaign_create).
+//
+//      Why v1 for this one step: AC's v3 endpoint (POST /api/3/campaign)
+//      only accepts a small whitelist of fields on creation — testing showed
+//      `type`/`name` are accepted but `status`, `public`, `sdate`, and the
+//      list/message association keys are all rejected as "not allowed".
+//      List/message attachment for campaign creation isn't documented on v3.
+//      AC's v1 API is still fully supported and has official examples for
+//      exactly this operation, so campaign creation goes through v1 while
+//      message creation (cleanly documented on v3) stays on v3. Both use the
+//      same API URL + API key.
 //
 // Required environment variables (set in Netlify site settings):
 //   AC_API_URL     e.g. https://youraccountname.api-us1.com
@@ -114,8 +119,42 @@ async function acRequest(path, { method = 'GET', body } = {}) {
   return json;
 }
 
+async function acLegacyRequest(params) {
+  const baseUrl = process.env.AC_API_URL;
+  const apiKey = process.env.AC_API_KEY;
+  if (!baseUrl || !apiKey) {
+    throw new Error('Missing AC_API_URL or AC_API_KEY environment variable');
+  }
+
+  const url = `${baseUrl}/admin/api.php?api_action=campaign_create&api_output=json&api_key=${encodeURIComponent(apiKey)}`;
+  const formBody = Object.entries(params)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join('&');
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formBody,
+  });
+
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = { raw: text };
+  }
+
+  if (!res.ok) {
+    throw new Error(`ActiveCampaign v1 API error (${res.status}) on campaign_create: ${text}`);
+  }
+  if (json.result_code === 0) {
+    throw new Error(`ActiveCampaign v1 campaign_create failed: ${text}`);
+  }
+  return json;
+}
+
 function formatSdate(date) {
-  // ActiveCampaign classic format: "YYYY-MM-DD HH:MM:SS"
   const pad = (n) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
@@ -148,7 +187,6 @@ exports.handler = async (event) => {
     const html = buildNewsletterHtml(campaignName, stories);
     const text = buildNewsletterText(campaignName, stories);
 
-    // 1. Create the message
     const messageRes = await acRequest('messages', {
       method: 'POST',
       body: {
@@ -168,22 +206,14 @@ exports.handler = async (event) => {
       throw new Error('Message created but no id returned: ' + JSON.stringify(messageRes));
     }
 
-    // 2. Create a draft campaign attached to the list + message.
-    //    status: 0 = draft (not scheduled/sent). sdate is required even for drafts.
-    const campaignBody = {
+    const campaignRes = await acLegacyRequest({
       type: 'single',
       name: campaignName,
       status: 0,
-      public: 1,
+      segmentid: 0,
       sdate: formatSdate(new Date()),
-      [`list[${listId}]`]: listId,
       [`p[${listId}]`]: listId,
       [`m[${messageId}]`]: 100,
-    };
-
-    const campaignRes = await acRequest('campaign', {
-      method: 'POST',
-      body: campaignBody,
     });
 
     return {
