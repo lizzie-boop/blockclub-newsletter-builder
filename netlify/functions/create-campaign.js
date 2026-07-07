@@ -4,13 +4,12 @@
 //   1. Builds an HTML email body (simple, stacked story-preview blocks)
 //   2. Creates a Message in ActiveCampaign (POST /api/3/messages) — documented, stable.
 //   3. Creates a draft Campaign attached to that message + your list
-//      (POST /api/3/campaign) — NOTE: this endpoint is not in AC's current
-//      public docs for list/message association. It still expects the old
-//      v1-style array params (list[ID], p[ID], m[MESSAGE_ID]) even though
-//      the request itself goes through the v3 API. This is a known quirk,
-//      confirmed via ActiveCampaign's own legacy examples + community reports,
-//      not an official v3 spec. Test against a real (non-production) list
-//      before trusting this in production.
+//      (POST /api/3/campaign) — NOTE: list/message attachment via this
+//      endpoint isn't in AC's current public docs. It uses legacy-style
+//      bracket keys (list[ID], p[ID], m[MESSAGE_ID]) sent as JSON object
+//      keys. This is a known quirk, confirmed via ActiveCampaign's own
+//      example + community reports, not an official v3 spec. Test against
+//      a real (non-production) list before trusting this in production.
 //
 // Required environment variables (set in Netlify site settings):
 //   AC_API_URL     e.g. https://youraccountname.api-us1.com
@@ -52,10 +51,6 @@ function buildStoryBlockHtml(story) {
 }
 
 function buildNewsletterHtml(campaignName, stories) {
-  // Ad-slot markers: HTML comments the ad-reports tool (planned) can locate
-  // and replace via PUT /api/3/messages/:id, without touching story blocks.
-  // AD-SLOT-0 sits above the first story (top placement); one slot is also
-  // inserted between each pair of stories for mid-newsletter placements.
   const storyBlocksWithSlots = stories
     .map((story, i) => `<!-- AD-SLOT-${i} -->\n${buildStoryBlockHtml(story)}`)
     .join('\n');
@@ -90,7 +85,7 @@ function buildNewsletterText(campaignName, stories) {
   return `${campaignName}\n\n${lines.join('\n')}`;
 }
 
-async function acRequest(path, { method = 'GET', body, isForm = false } = {}) {
+async function acRequest(path, { method = 'GET', body } = {}) {
   const baseUrl = process.env.AC_API_URL;
   const apiKey = process.env.AC_API_KEY;
   if (!baseUrl || !apiKey) {
@@ -99,7 +94,7 @@ async function acRequest(path, { method = 'GET', body, isForm = false } = {}) {
 
   const headers = { 'Api-Token': apiKey };
   let payload = body;
-  if (body && !isForm) {
+  if (body) {
     headers['Content-Type'] = 'application/json';
     payload = JSON.stringify(body);
   }
@@ -117,16 +112,6 @@ async function acRequest(path, { method = 'GET', body, isForm = false } = {}) {
     throw new Error(`ActiveCampaign API error (${res.status}) on ${path}: ${text}`);
   }
   return json;
-}
-
-function toFormBody(paramsObj) {
-  // ActiveCampaign's campaign-creation endpoint expects classic
-  // application/x-www-form-urlencoded array-style params.
-  const parts = [];
-  for (const [key, value] of Object.entries(paramsObj)) {
-    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-  }
-  return parts.join('&');
 }
 
 function formatSdate(date) {
@@ -184,9 +169,8 @@ exports.handler = async (event) => {
     }
 
     // 2. Create a draft campaign attached to the list + message.
-    //    status: 0 = draft (not scheduled/sent). sdate is required by the
-    //    endpoint even for drafts; it does not trigger a send while status is 0.
-    const formParams = {
+    //    status: 0 = draft (not scheduled/sent). sdate is required even for drafts.
+    const campaignBody = {
       type: 'single',
       name: campaignName,
       status: 0,
@@ -199,8 +183,7 @@ exports.handler = async (event) => {
 
     const campaignRes = await acRequest('campaign', {
       method: 'POST',
-      isForm: true,
-      body: toFormBody(formParams),
+      body: campaignBody,
     });
 
     return {
@@ -209,7 +192,7 @@ exports.handler = async (event) => {
         success: true,
         campaignName,
         messageId,
-        adSlotCount: stories.length + 1, // AD-SLOT-0 .. AD-SLOT-{n}
+        adSlotCount: stories.length + 1,
         campaign: campaignRes,
       }),
     };
