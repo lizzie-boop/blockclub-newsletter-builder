@@ -13,18 +13,21 @@ exports.handler = async (event) => {
   const search = (event.queryStringParameters?.search || '').toLowerCase();
 
   try {
-    const url = `${baseUrl}/api/3/campaigns?filters[status]=0&orders[cdate]=DESC&limit=30`;
+    const url = `${baseUrl}/api/3/campaigns?filters[status]=0&orders[cdate]=DESC&limit=50`;
     const res = await fetch(url, { headers: { 'Api-Token': apiKey } });
     const text = await res.text();
     if (!res.ok) {
       return { statusCode: res.status, body: JSON.stringify({ error: text }) };
     }
     const data = JSON.parse(text);
-    let campaigns = (data.campaigns || []).map((c) => ({
-      id: c.id,
-      name: c.name,
-      cdate: c.cdate,
-    }));
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    let campaigns = (data.campaigns || [])
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        cdate: c.cdate,
+      }))
+      .filter((c) => c.cdate && new Date(c.cdate) >= thirtyDaysAgo);
 
     if (search) {
       campaigns = campaigns.filter((c) => c.name.toLowerCase().includes(search));
