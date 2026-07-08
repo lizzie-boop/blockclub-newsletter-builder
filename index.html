@@ -95,6 +95,17 @@
   }
   button.primary:hover { background: #000; }
   button.primary:disabled { background: #999; cursor: not-allowed; }
+  button.secondary {
+    background: #fff;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  button.secondary:hover { background: #f0eee9; }
   #status {
     margin: 18px 0;
     font-size: 14px;
@@ -187,23 +198,7 @@
     content: attr(data-placeholder);
     color: #999;
   }
-  .draft-list {
-    border: 1px solid var(--rule);
-    border-radius: 4px;
-    background: #fff;
-    max-height: 260px;
-    overflow-y: auto;
-  }
-  .draft-row {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--rule);
-    cursor: pointer;
-    font-size: 14px;
-  }
-  .draft-row:last-child { border-bottom: none; }
-  .draft-row:hover { background: #f7f5f0; }
-  .draft-row.selected { background: #eee7db; font-weight: 600; }
-  .draft-row .date { color: var(--muted); font-size: 12px; font-weight: normal; }
+  .draft-list { }
   .ad-slot-card {
     border: 1px solid var(--rule);
     border-radius: 4px;
@@ -244,25 +239,66 @@
     .ad-layout { flex-direction: column; }
     .ad-preview-col { position: static; }
   }
+  .edit-story-card {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: #fff;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .edit-story-card .row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .edit-story-card .row-header .order-controls {
+    display: flex;
+    gap: 6px;
+  }
+  .char-count {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: right;
+    margin-top: 4px;
+  }
+  .char-count.over { color: var(--accent); font-weight: 600; }
+  .history-list {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .history-list .history-row {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .history-list .history-row:last-child { border-bottom: none; }
 </style>
 </head>
 <body>
 
 <header>
   <h1>Newsletter Builder</h1>
-  <p>Paste story links, get a draft campaign in ActiveCampaign.</p>
+  <p>Paste story links, submit for review, then finalize into ActiveCampaign.</p>
   <div class="tabs">
-    <button type="button" class="tab-btn active" id="tabBuilderBtn">Newsletter Builder</button>
+    <button type="button" class="tab-btn active" id="tabSubmitBtn">Submit Newsletter</button>
+    <button type="button" class="tab-btn" id="tabFinalizeBtn">Finalize Newsletter</button>
     <button type="button" class="tab-btn" id="tabAdBtn">Ad Insertion</button>
   </div>
 </header>
 
 <main>
 
-<div id="builderView">
+<!-- ============ TAB 1: SUBMIT ============ -->
+<div id="submitView">
   <div class="field">
     <label for="campaignName">Campaign name</label>
     <input type="text" id="campaignName" placeholder="e.g. Morning Edition — July 7" />
+  </div>
+
+  <div class="field">
+    <label for="submittedBy">Your name (optional)</label>
+    <input type="text" id="submittedBy" placeholder="So whoever finalizes this knows who submitted it" />
   </div>
 
   <div class="field">
@@ -274,7 +310,7 @@
     <label for="templateSelect">Template (optional)</label>
     <select id="templateSelect"><option value="">Neighborhood Template</option></select>
     <div class="hint">
-      Optional — pick one of your custom ActiveCampaign templates. Leave as "Use default design" for the built-in layout.
+      Optional — pick one of your custom ActiveCampaign templates. Leave as "Neighborhood Template" for the built-in layout.
     </div>
     <div id="templateStatus" style="margin-top:8px;font-size:14px;"></div>
   </div>
@@ -292,16 +328,35 @@
   <div class="field">
     <label for="links">Story links</label>
     <textarea id="links" placeholder="https://blockclubchicago.org/2026/07/07/example-story/&#10;https://blockclubchicago.org/2026/07/06/another-story/"></textarea>
-    <div class="hint">One link per line, in the order you want them to appear.</div>
+    <div class="hint">One link per line, in the order you want them to appear. If a link fails to resolve, fix it here and click "Fetch stories" again.</div>
   </div>
 
-  <button class="primary" id="buildBtn">Build newsletter</button>
+  <button class="primary" id="fetchBtn">Fetch stories</button>
 
   <div id="status"></div>
   <div class="stories" id="stories"></div>
-  <div id="result"></div>
+  <div id="submitResult" style="margin-top:20px;"></div>
+  <div id="submitBtnWrap" style="margin-top:20px;display:none;">
+    <button class="primary" id="submitBtn">Submit for review</button>
+  </div>
 </div>
 
+<!-- ============ TAB 2: FINALIZE ============ -->
+<div id="finalizeView" style="display:none;">
+  <div class="field">
+    <label for="pendingSelect">Pick a submission to finalize</label>
+    <select id="pendingSelect"><option value="">Loading submissions…</option></select>
+  </div>
+
+  <div id="finalizeForm"></div>
+
+  <div id="finalizeHistoryWrap" style="margin-top:36px;">
+    <h3 style="font-family:Georgia,serif;font-size:16px;margin-bottom:4px;">Recently finalized</h3>
+    <div class="history-list" id="finalizeHistory">Loading…</div>
+  </div>
+</div>
+
+<!-- ============ TAB 3: AD INSERTION ============ -->
 <div id="adView" style="display:none;">
   <div class="field">
     <label for="draftSelect">Find a draft newsletter</label>
@@ -318,64 +373,17 @@
 </main>
 
 <script>
-const buildBtn = document.getElementById('buildBtn');
-const statusEl = document.getElementById('status');
-const storiesEl = document.getElementById('stories');
-const resultEl = document.getElementById('result');
-const listSelect = document.getElementById('listSelect');
-const templateSelect = document.getElementById('templateSelect');
-const templateStatus = document.getElementById('templateStatus');
-const introEditor = document.getElementById('introEditor');
-
-// --- Tab switching ---
-const tabBuilderBtn = document.getElementById('tabBuilderBtn');
-const tabAdBtn = document.getElementById('tabAdBtn');
-const builderView = document.getElementById('builderView');
-const adView = document.getElementById('adView');
-
-const mainEl = document.querySelector('main');
-
-tabBuilderBtn.addEventListener('click', () => {
-  tabBuilderBtn.classList.add('active');
-  tabAdBtn.classList.remove('active');
-  builderView.style.display = 'block';
-  adView.style.display = 'none';
-  mainEl.style.maxWidth = '720px';
-});
-tabAdBtn.addEventListener('click', () => {
-  tabAdBtn.classList.add('active');
-  tabBuilderBtn.classList.remove('active');
-  adView.style.display = 'block';
-  builderView.style.display = 'none';
-  mainEl.style.maxWidth = '1100px';
-});
-
-document.getElementById('boldBtn').addEventListener('click', () => {
-  introEditor.focus();
-  document.execCommand('bold');
-});
-document.getElementById('linkBtn').addEventListener('click', () => {
-  const url = prompt('Paste the link URL (must start with http:// or https://):');
-  if (!url) return;
-  introEditor.focus();
-  document.execCommand('createLink', false, url);
-});
-document.getElementById('unlinkBtn').addEventListener('click', () => {
-  introEditor.focus();
-  document.execCommand('unlink');
-});
+/* ============================================================
+   Shared helpers
+   ============================================================ */
 
 function sanitizeIntroHtml(root) {
   const allowed = new Set(['B', 'STRONG', 'A', 'BR']);
-
   function walk(node) {
     let out = '';
     node.childNodes.forEach((child) => {
       if (child.nodeType === Node.TEXT_NODE) {
-        out += child.textContent
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
+        out += child.textContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       } else if (child.nodeType === Node.ELEMENT_NODE) {
         const tag = child.tagName;
         if (tag === 'BR') {
@@ -387,9 +395,7 @@ function sanitizeIntroHtml(root) {
           let href = child.getAttribute('href') || '';
           if (!/^https?:\/\//i.test(href)) href = '';
           const inner = walk(child);
-          out += href
-            ? `<a href="${href.replace(/"/g, '&quot;')}" target="_blank" rel="noopener">${inner}</a>`
-            : inner;
+          out += href ? `<a href="${href.replace(/"/g, '&quot;')}" target="_blank" rel="noopener">${inner}</a>` : inner;
         } else if (allowed.has(tag)) {
           out += `<${tag.toLowerCase()}>${walk(child)}</${tag.toLowerCase()}>`;
         } else {
@@ -399,104 +405,159 @@ function sanitizeIntroHtml(root) {
     });
     return out;
   }
-
   return walk(root).trim();
 }
+
+function makeRichEditor(container, placeholder) {
+  container.innerHTML = `
+    <div class="editor-toolbar">
+      <button type="button" class="boldBtn" title="Bold"><b>B</b></button>
+      <button type="button" class="linkBtn" title="Add link">Link</button>
+      <button type="button" class="unlinkBtn" title="Remove link">Unlink</button>
+    </div>
+    <div class="rich-editor" contenteditable="true" data-placeholder="${placeholder}"></div>
+  `;
+  const editor = container.querySelector('.rich-editor');
+  container.querySelector('.boldBtn').addEventListener('click', () => { editor.focus(); document.execCommand('bold'); });
+  container.querySelector('.linkBtn').addEventListener('click', () => {
+    const url = prompt('Paste the link URL (must start with http:// or https://):');
+    if (!url) return;
+    editor.focus();
+    document.execCommand('createLink', false, url);
+  });
+  container.querySelector('.unlinkBtn').addEventListener('click', () => { editor.focus(); document.execCommand('unlink'); });
+  return editor;
+}
+
+async function loadListOptions(selectEl) {
+  try {
+    const res = await fetch('/.netlify/functions/list-lists');
+    const data = await res.json();
+    if (!res.ok || !data.lists) {
+      selectEl.innerHTML = `<option value="">Could not load lists</option>`;
+      return [];
+    }
+    selectEl.innerHTML = data.lists.map((l) => `<option value="${l.id}">${l.name}</option>`).join('');
+    return data.lists;
+  } catch (err) {
+    selectEl.innerHTML = `<option value="">Could not load lists</option>`;
+    return [];
+  }
+}
+
+async function loadTemplateOptions(selectEl) {
+  try {
+    const res = await fetch('/.netlify/functions/list-templates');
+    const data = await res.json();
+    if (!res.ok || !data.templates) return [];
+    if (data.templates.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No API-readable templates found';
+      selectEl.appendChild(opt);
+      return [];
+    }
+    data.templates.forEach((t) => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name;
+      selectEl.appendChild(opt);
+    });
+    return data.templates;
+  } catch (err) {
+    return [];
+  }
+}
+
+const IGNORED_WORDS = new Set(['news', 'newsletter', 'and', 'the', 'park']);
+function normalizeToWords(str) {
+  return (str || '').toLowerCase().replace(/[&,]/g, ' ').split(/\s+/).filter((w) => w.length > 3 && !IGNORED_WORDS.has(w));
+}
+function findBestTemplateMatch(listName, templates) {
+  const listWords = new Set(normalizeToWords(listName));
+  let best = null, bestScore = 0;
+  templates.forEach((t) => {
+    const score = normalizeToWords(t.name).filter((w) => listWords.has(w)).length;
+    if (score > bestScore) { bestScore = score; best = t; }
+  });
+  return best;
+}
+
+/* ============================================================
+   Tab switching
+   ============================================================ */
+
+const mainEl = document.querySelector('main');
+const tabSubmitBtn = document.getElementById('tabSubmitBtn');
+const tabFinalizeBtn = document.getElementById('tabFinalizeBtn');
+const tabAdBtn = document.getElementById('tabAdBtn');
+const submitView = document.getElementById('submitView');
+const finalizeView = document.getElementById('finalizeView');
+const adView = document.getElementById('adView');
+
+function setActiveTab(tab) {
+  [tabSubmitBtn, tabFinalizeBtn, tabAdBtn].forEach((b) => b.classList.remove('active'));
+  [submitView, finalizeView, adView].forEach((v) => (v.style.display = 'none'));
+  if (tab === 'submit') { tabSubmitBtn.classList.add('active'); submitView.style.display = 'block'; mainEl.style.maxWidth = '720px'; }
+  if (tab === 'finalize') { tabFinalizeBtn.classList.add('active'); finalizeView.style.display = 'block'; mainEl.style.maxWidth = '900px'; loadPendingDropdown(); loadFinalizeHistory(); }
+  if (tab === 'ad') { tabAdBtn.classList.add('active'); adView.style.display = 'block'; mainEl.style.maxWidth = '1100px'; }
+}
+tabSubmitBtn.addEventListener('click', () => setActiveTab('submit'));
+tabFinalizeBtn.addEventListener('click', () => setActiveTab('finalize'));
+tabAdBtn.addEventListener('click', () => setActiveTab('ad'));
+
+/* ============================================================
+   TAB 1: SUBMIT
+   ============================================================ */
+
+const fetchBtn = document.getElementById('fetchBtn');
+const statusEl = document.getElementById('status');
+const storiesEl = document.getElementById('stories');
+const submitResultEl = document.getElementById('submitResult');
+const submitBtnWrap = document.getElementById('submitBtnWrap');
+const submitBtn = document.getElementById('submitBtn');
+const listSelect = document.getElementById('listSelect');
+const templateSelect = document.getElementById('templateSelect');
+const templateStatus = document.getElementById('templateStatus');
+const introEditor = document.getElementById('introEditor');
+
+document.getElementById('boldBtn').addEventListener('click', () => { introEditor.focus(); document.execCommand('bold'); });
+document.getElementById('linkBtn').addEventListener('click', () => {
+  const url = prompt('Paste the link URL (must start with http:// or https://):');
+  if (!url) return;
+  introEditor.focus();
+  document.execCommand('createLink', false, url);
+});
+document.getElementById('unlinkBtn').addEventListener('click', () => { introEditor.focus(); document.execCommand('unlink'); });
 
 function setStatus(msg, kind) {
   statusEl.textContent = msg;
   statusEl.className = kind || '';
 }
 
-async function loadLists() {
-  try {
-    const res = await fetch('/.netlify/functions/list-lists');
-    const data = await res.json();
-    if (!res.ok || !data.lists) {
-      listSelect.innerHTML = `<option value="">Could not load lists</option>`;
-      return;
-    }
-    listSelect.innerHTML = data.lists
-      .map((l) => `<option value="${l.id}">${l.name}</option>`)
-      .join('');
-  } catch (err) {
-    listSelect.innerHTML = `<option value="">Could not load lists</option>`;
-  }
-}
-
 let allTemplates = [];
+let resolvedStories = [];
 
-async function loadTemplates() {
-  try {
-    const res = await fetch('/.netlify/functions/list-templates');
-    const data = await res.json();
-    if (!res.ok || !data.templates) return;
-    allTemplates = data.templates;
-    if (data.templates.length === 0) {
-      const opt = document.createElement('option');
-      opt.value = '';
-      opt.textContent = 'No API-readable templates found';
-      templateSelect.appendChild(opt);
-      return;
-    }
-    data.templates.forEach((t) => {
-      const opt = document.createElement('option');
-      opt.value = t.id;
-      opt.textContent = t.name;
-      templateSelect.appendChild(opt);
-    });
-  } catch (err) {
-    // Silent fail — template selection is optional.
-  }
-}
-
-// Matches a list name to the best-fitting template by shared significant
-// words (e.g. "Logan Square, Humboldt Park & Avondale" list ↔ "Logan Square"
-// template). Ignores short/common words so things like "and" or "news"
-// don't create false matches.
-const IGNORED_WORDS = new Set(['news', 'newsletter', 'and', 'the', 'park']);
-
-function normalizeToWords(str) {
-  return (str || '')
-    .toLowerCase()
-    .replace(/[&,]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length > 3 && !IGNORED_WORDS.has(w));
-}
-
-function findBestTemplateMatch(listName) {
-  const listWords = new Set(normalizeToWords(listName));
-  let best = null;
-  let bestScore = 0;
-  allTemplates.forEach((t) => {
-    const tWords = normalizeToWords(t.name);
-    const score = tWords.filter((w) => listWords.has(w)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      best = t;
-    }
-  });
-  return best;
+async function initSubmitTab() {
+  const lists = await loadListOptions(listSelect);
+  allTemplates = await loadTemplateOptions(templateSelect);
+  autoSelectTemplateForList();
 }
 
 function autoSelectTemplateForList() {
   const listName = listSelect.options[listSelect.selectedIndex]?.text;
   if (!listName || allTemplates.length === 0) return;
-  const match = findBestTemplateMatch(listName);
+  const match = findBestTemplateMatch(listName, allTemplates);
   if (match) {
     templateSelect.value = match.id;
     templateSelect.dispatchEvent(new Event('change'));
   }
 }
-
 listSelect.addEventListener('change', autoSelectTemplateForList);
 
 templateSelect.addEventListener('change', async () => {
   const id = templateSelect.value;
-  if (!id) {
-    templateStatus.innerHTML = '';
-    return;
-  }
+  if (!id) { templateStatus.innerHTML = ''; return; }
   templateStatus.style.color = 'var(--muted)';
   templateStatus.textContent = 'Checking template…';
   try {
@@ -515,9 +576,7 @@ templateSelect.addEventListener('change', async () => {
   }
 });
 
-Promise.all([loadLists(), loadTemplates()]).then(() => {
-  autoSelectTemplateForList();
-});
+initSubmitTab();
 
 function renderStoryCard(id, url) {
   const card = document.createElement('div');
@@ -525,10 +584,7 @@ function renderStoryCard(id, url) {
   card.id = id;
   card.innerHTML = `
     <div class="placeholder">Loading…</div>
-    <div class="body">
-      <h3>Fetching story…</h3>
-      <div class="url">${url}</div>
-    </div>
+    <div class="body"><h3>Fetching story…</h3><div class="url">${url}</div></div>
   `;
   storiesEl.appendChild(card);
   return card;
@@ -542,9 +598,7 @@ function updateStoryCard(card, story) {
     return;
   }
   card.className = 'story-card';
-  const imgHtml = story.image
-    ? `<img src="${story.image}" alt="">`
-    : `<div class="placeholder">No image</div>`;
+  const imgHtml = story.image ? `<img src="${story.image}" alt="">` : `<div class="placeholder">No image</div>`;
   card.innerHTML = `
     ${imgHtml}
     <div class="body">
@@ -561,37 +615,24 @@ function cardPlaceholder(text) {
   return d;
 }
 
-buildBtn.addEventListener('click', async () => {
-  const campaignName = document.getElementById('campaignName').value.trim();
-  const introText = sanitizeIntroHtml(introEditor);
-  const listId = listSelect.value;
-  const rawLinks = document.getElementById('links').value
-    .split('\n')
-    .map(l => l.trim())
-    .filter(Boolean);
+fetchBtn.addEventListener('click', async () => {
+  const rawLinks = document.getElementById('links').value.split('\n').map((l) => l.trim()).filter(Boolean);
 
   storiesEl.innerHTML = '';
-  resultEl.innerHTML = '';
+  submitResultEl.innerHTML = '';
+  submitBtnWrap.style.display = 'none';
+  resolvedStories = [];
   setStatus('');
 
-  if (!campaignName) {
-    setStatus('Give the campaign a name first.', 'error');
-    return;
-  }
-  if (!listId) {
-    setStatus('Choose a list to send to.', 'error');
-    return;
-  }
   if (rawLinks.length === 0) {
     setStatus('Paste at least one story link.', 'error');
     return;
   }
 
-  buildBtn.disabled = true;
+  fetchBtn.disabled = true;
   setStatus(`Fetching ${rawLinks.length} ${rawLinks.length === 1 ? 'story' : 'stories'}…`);
 
   const cards = rawLinks.map((url, i) => renderStoryCard(`story-${i}`, url));
-
   const resolved = [];
   for (let i = 0; i < rawLinks.length; i++) {
     try {
@@ -608,51 +649,294 @@ buildBtn.addEventListener('click', async () => {
     }
   }
 
+  resolvedStories = resolved;
+  fetchBtn.disabled = false;
+
   if (resolved.length === 0) {
-    setStatus('None of those links could be resolved. Nothing was sent to ActiveCampaign.', 'error');
-    buildBtn.disabled = false;
+    setStatus('None of those links could be resolved. Fix the links above and try again.', 'error');
     return;
   }
 
   if (resolved.length < rawLinks.length) {
-    setStatus(`${resolved.length} of ${rawLinks.length} stories resolved. Building the draft with those — check the failed links above.`);
+    setStatus(`${resolved.length} of ${rawLinks.length} stories resolved. Fix any failed links above and re-fetch, or submit with what resolved.`);
   } else {
-    setStatus('All stories resolved. Creating the draft in ActiveCampaign…');
+    setStatus('All stories resolved.', 'success');
   }
 
+  submitBtnWrap.style.display = 'block';
+});
+
+submitBtn.addEventListener('click', async () => {
+  const campaignName = document.getElementById('campaignName').value.trim();
+  const submittedBy = document.getElementById('submittedBy').value.trim();
+  const introText = sanitizeIntroHtml(introEditor);
+  const listId = listSelect.value;
+  const templateId = templateSelect.value;
+
+  if (!campaignName) { setStatus('Give the campaign a name first.', 'error'); return; }
+  if (!listId) { setStatus('Choose a list to send to.', 'error'); return; }
+  if (resolvedStories.length === 0) { setStatus('Fetch at least one story first.', 'error'); return; }
+
+  submitBtn.disabled = true;
+  setStatus('Submitting for review…');
+
   try {
-    const res = await fetch('/.netlify/functions/create-campaign', {
+    const res = await fetch('/.netlify/functions/save-pending-newsletter', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ campaignName, introText, listId, templateId: templateSelect.value, stories: resolved }),
+      body: JSON.stringify({ campaignName, introText, listId, templateId, stories: resolvedStories, submittedBy }),
     });
     const data = await res.json();
 
     if (!data.success) {
-      setStatus(`Error creating campaign: ${data.error}`, 'error');
+      setStatus(`Error submitting: ${data.error}`, 'error');
     } else {
-      setStatus('Draft campaign created.', 'success');
-      resultEl.innerHTML = `
+      setStatus('Submitted for review.', 'success');
+      submitResultEl.innerHTML = `
         <footer class="result">
-          Draft "<strong>${campaignName}</strong>" was created in ActiveCampaign with ${resolved.length} ${resolved.length === 1 ? 'story' : 'stories'}.
-          Open ActiveCampaign → Campaigns to review, edit, and send it.
-          ${data.slotWarning ? `<p style="color:#b3312c;margin-top:10px;">${data.slotWarning}</p>` : ''}
+          "<strong>${campaignName}</strong>" was submitted with ${resolvedStories.length} ${resolvedStories.length === 1 ? 'story' : 'stories'}.
+          Whoever finalizes it can find it in the "Finalize Newsletter" tab.
         </footer>
       `;
+      submitBtnWrap.style.display = 'none';
     }
   } catch (err) {
-    setStatus(`Error creating campaign: ${err.message}`, 'error');
+    setStatus(`Error submitting: ${err.message}`, 'error');
   }
 
-  buildBtn.disabled = false;
+  submitBtn.disabled = false;
 });
 
-// ---------- Ad Insertion tab ----------
+/* ============================================================
+   TAB 2: FINALIZE
+   ============================================================ */
 
-let allDrafts = [];
+const pendingSelect = document.getElementById('pendingSelect');
+const finalizeForm = document.getElementById('finalizeForm');
+const finalizeHistory = document.getElementById('finalizeHistory');
+let currentEditStories = [];
+let currentPendingId = null;
+
+async function loadPendingDropdown() {
+  pendingSelect.innerHTML = '<option value="">Loading submissions…</option>';
+  try {
+    const res = await fetch('/.netlify/functions/list-pending-newsletters');
+    const data = await res.json();
+    const pending = (data.items || []).filter((i) => i.status === 'pending');
+    if (pending.length === 0) {
+      pendingSelect.innerHTML = '<option value="">No pending submissions</option>';
+      return;
+    }
+    pendingSelect.innerHTML =
+      '<option value="">Select a submission…</option>' +
+      pending.map((p) => {
+        const date = p.submittedAt ? new Date(p.submittedAt).toLocaleString() : '';
+        const by = p.submittedBy ? ` — ${p.submittedBy}` : '';
+        return `<option value="${p.id}">${p.campaignName}${by} (${date})</option>`;
+      }).join('');
+  } catch (err) {
+    pendingSelect.innerHTML = '<option value="">Could not load submissions</option>';
+  }
+}
+
+async function loadFinalizeHistory() {
+  finalizeHistory.textContent = 'Loading…';
+  try {
+    const res = await fetch('/.netlify/functions/list-pending-newsletters');
+    const data = await res.json();
+    const completed = (data.items || []).filter((i) => i.status === 'completed').slice(0, 15);
+    if (completed.length === 0) {
+      finalizeHistory.innerHTML = '<p>Nothing finalized yet.</p>';
+      return;
+    }
+    finalizeHistory.innerHTML = completed.map((c) => {
+      const date = c.finalizedAt ? new Date(c.finalizedAt).toLocaleString() : '';
+      return `<div class="history-row">✓ <strong>${c.campaignName}</strong> — finalized ${date}${c.resultCampaignId ? ` (AC campaign #${c.resultCampaignId})` : ''}</div>`;
+    }).join('');
+  } catch (err) {
+    finalizeHistory.textContent = 'Could not load history.';
+  }
+}
+
+pendingSelect.addEventListener('change', async () => {
+  const id = pendingSelect.value;
+  if (!id) { finalizeForm.innerHTML = ''; return; }
+  currentPendingId = id;
+  finalizeForm.innerHTML = '<p class="hint">Loading…</p>';
+
+  try {
+    const res = await fetch(`/.netlify/functions/get-pending-newsletter?id=${encodeURIComponent(id)}`);
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      finalizeForm.innerHTML = `<p class="hint" style="color:var(--accent);">Could not load: ${data.error}</p>`;
+      return;
+    }
+    renderFinalizeForm(data);
+  } catch (err) {
+    finalizeForm.innerHTML = `<p class="hint" style="color:var(--accent);">Could not load: ${err.message}</p>`;
+  }
+});
+
+function renderFinalizeForm(data) {
+  currentEditStories = JSON.parse(JSON.stringify(data.stories));
+
+  finalizeForm.innerHTML = `
+    <div class="field">
+      <label>Campaign name</label>
+      <input type="text" id="finCampaignName" value="${data.campaignName.replace(/"/g, '&quot;')}" />
+    </div>
+    <div class="field">
+      <label>Send to list</label>
+      <select id="finListSelect"><option>Loading…</option></select>
+    </div>
+    <div class="field">
+      <label>Template</label>
+      <select id="finTemplateSelect"><option value="">Neighborhood Template</option></select>
+    </div>
+    <div class="field">
+      <label>Newsletter Topper</label>
+      <div id="finIntroEditorWrap"></div>
+    </div>
+    <div id="finStories"></div>
+    <button class="primary" id="finalizeBtn" style="margin-top:10px;">Create draft in ActiveCampaign</button>
+    <div id="finalizeStatus" style="margin-top:14px;"></div>
+  `;
+
+  const finListSelect = document.getElementById('finListSelect');
+  const finTemplateSelect = document.getElementById('finTemplateSelect');
+  loadListOptions(finListSelect).then(() => { finListSelect.value = data.listId || ''; });
+  loadTemplateOptions(finTemplateSelect).then(() => { finTemplateSelect.value = data.templateId || ''; });
+
+  const finIntroEditor = makeRichEditor(document.getElementById('finIntroEditorWrap'), 'Newsletter topper');
+  finIntroEditor.innerHTML = data.introText || '';
+
+  renderEditStories();
+
+  document.getElementById('finalizeBtn').addEventListener('click', async () => {
+    const finalizeStatus = document.getElementById('finalizeStatus');
+    const campaignName = document.getElementById('finCampaignName').value.trim();
+    const listId = finListSelect.value;
+    const templateId = finTemplateSelect.value;
+    const introText = sanitizeIntroHtml(finIntroEditor);
+
+    if (!campaignName || !listId || currentEditStories.length === 0) {
+      finalizeStatus.style.color = 'var(--accent)';
+      finalizeStatus.textContent = 'Campaign name, list, and at least one story are required.';
+      return;
+    }
+
+    document.getElementById('finalizeBtn').disabled = true;
+    finalizeStatus.style.color = 'var(--muted)';
+    finalizeStatus.textContent = 'Creating draft in ActiveCampaign…';
+
+    try {
+      const res = await fetch('/.netlify/functions/finalize-pending-newsletter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentPendingId, campaignName, introText, listId, templateId, stories: currentEditStories }),
+      });
+      const result = await res.json();
+
+      if (!result.success) {
+        finalizeStatus.style.color = 'var(--accent)';
+        finalizeStatus.textContent = `Error: ${result.error}`;
+      } else {
+        finalizeStatus.style.color = '#1a6e3f';
+        finalizeStatus.textContent = `✓ Draft created in ActiveCampaign.${result.slotWarning ? ' ' + result.slotWarning : ''}`;
+        finalizeForm.innerHTML += '<p class="hint">This submission has moved to "Recently finalized" below and is no longer in the pending list.</p>';
+        loadPendingDropdown();
+        loadFinalizeHistory();
+      }
+    } catch (err) {
+      finalizeStatus.style.color = 'var(--accent)';
+      finalizeStatus.textContent = `Error: ${err.message}`;
+    }
+
+    document.getElementById('finalizeBtn').disabled = false;
+  });
+}
+
+function renderEditStories() {
+  const finStories = document.getElementById('finStories');
+  finStories.innerHTML = '';
+
+  currentEditStories.forEach((story, i) => {
+    const card = document.createElement('div');
+    card.className = 'edit-story-card';
+    card.innerHTML = `
+      <div class="row-header">
+        <strong>Story ${i + 1}</strong>
+        <div class="order-controls">
+          <button type="button" class="secondary upBtn" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="secondary downBtn" ${i === currentEditStories.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="secondary removeBtn">Remove</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Headline</label>
+        <input type="text" class="headlineInput" value="${(story.headline || '').replace(/"/g, '&quot;')}" />
+      </div>
+      <div class="field">
+        <label>Subhead / excerpt</label>
+        <textarea class="excerptInput" style="min-height:70px;">${story.excerpt || ''}</textarea>
+        <div class="char-count"><span class="countNum">0</span>/140 (this template truncates around 140 characters)</div>
+      </div>
+      <div class="field">
+        <label>Image URL</label>
+        <input type="text" class="imageInputEdit" value="${(story.image || '').replace(/"/g, '&quot;')}" />
+      </div>
+      <div class="field">
+        <label>Link URL</label>
+        <input type="text" class="linkInputEdit" value="${(story.link || '').replace(/"/g, '&quot;')}" />
+      </div>
+    `;
+    finStories.appendChild(card);
+
+    const headlineInput = card.querySelector('.headlineInput');
+    const excerptInput = card.querySelector('.excerptInput');
+    const imageInputEdit = card.querySelector('.imageInputEdit');
+    const linkInputEdit = card.querySelector('.linkInputEdit');
+    const countNum = card.querySelector('.countNum');
+    const charCountEl = card.querySelector('.char-count');
+
+    function updateCount() {
+      const len = excerptInput.value.length;
+      countNum.textContent = len;
+      charCountEl.classList.toggle('over', len > 140);
+    }
+    updateCount();
+
+    headlineInput.addEventListener('input', () => { currentEditStories[i].headline = headlineInput.value; });
+    excerptInput.addEventListener('input', () => { currentEditStories[i].excerpt = excerptInput.value; updateCount(); });
+    imageInputEdit.addEventListener('input', () => { currentEditStories[i].image = imageInputEdit.value; });
+    linkInputEdit.addEventListener('input', () => { currentEditStories[i].link = linkInputEdit.value; });
+
+    card.querySelector('.upBtn').addEventListener('click', () => {
+      if (i === 0) return;
+      [currentEditStories[i - 1], currentEditStories[i]] = [currentEditStories[i], currentEditStories[i - 1]];
+      renderEditStories();
+    });
+    card.querySelector('.downBtn').addEventListener('click', () => {
+      if (i === currentEditStories.length - 1) return;
+      [currentEditStories[i + 1], currentEditStories[i]] = [currentEditStories[i], currentEditStories[i + 1]];
+      renderEditStories();
+    });
+    card.querySelector('.removeBtn').addEventListener('click', () => {
+      currentEditStories.splice(i, 1);
+      renderEditStories();
+    });
+  });
+}
+
+/* ============================================================
+   TAB 3: AD INSERTION
+   ============================================================ */
+
 const draftSelect = document.getElementById('draftSelect');
+const adSlotsHeading = document.getElementById('adSlotsHeading');
+const adPreviewCol = document.getElementById('adPreviewCol');
 const adSlotsSection = document.getElementById('adSlotsSection');
-let selectedCampaignId = null;
+const adLayout = document.getElementById('adLayout');
 
 async function loadDraftCampaigns() {
   try {
@@ -662,27 +946,17 @@ async function loadDraftCampaigns() {
       draftSelect.innerHTML = '<option value="">Could not load drafts</option>';
       return;
     }
-    allDrafts = data.campaigns;
     draftSelect.innerHTML =
       '<option value="">Select a draft…</option>' +
-      allDrafts
-        .map((d) => {
-          const date = d.cdate ? new Date(d.cdate).toLocaleDateString() : '';
-          return `<option value="${d.id}">${d.name}${date ? ' — ' + date : ''}</option>`;
-        })
-        .join('');
+      data.campaigns.map((d) => {
+        const date = d.cdate ? new Date(d.cdate).toLocaleDateString() : '';
+        return `<option value="${d.id}">${d.name}${date ? ' — ' + date : ''}</option>`;
+      }).join('');
   } catch (err) {
     draftSelect.innerHTML = '<option value="">Could not load drafts</option>';
   }
 }
-
-// Load immediately on page load (not on tab click) so the dropdown is
-// already populated the moment someone switches to this tab.
 loadDraftCampaigns();
-
-const adSlotsHeading = document.getElementById('adSlotsHeading');
-const adPreviewCol = document.getElementById('adPreviewCol');
-const adLayout = document.getElementById('adLayout');
 
 draftSelect.addEventListener('change', () => {
   if (draftSelect.value) {
@@ -696,8 +970,6 @@ draftSelect.addEventListener('change', () => {
 });
 
 async function selectDraft(campaignId) {
-  selectedCampaignId = campaignId;
-
   adLayout.style.display = 'none';
   adSlotsHeading.innerHTML = '<p class="hint">Loading ad slots…</p>';
   adPreviewCol.innerHTML = '';
@@ -729,7 +1001,7 @@ async function selectDraft(campaignId) {
       <iframe src="${previewUrl}" style="width:100%;height:600px;border:1px solid var(--rule);border-radius:4px;background:#fff;"></iframe>
     `;
 
-    data.slots.forEach((slot, i) => {
+    data.slots.forEach((slot) => {
       const card = document.createElement('div');
       card.className = 'ad-slot-card';
       card.innerHTML = `
@@ -766,10 +1038,8 @@ async function selectDraft(campaignId) {
       fileInput.addEventListener('change', async () => {
         const file = fileInput.files[0];
         if (!file) return;
-
         uploadStatus.style.color = 'var(--muted)';
         uploadStatus.textContent = 'Uploading…';
-
         try {
           const dataBase64 = await new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -777,26 +1047,17 @@ async function selectDraft(campaignId) {
             reader.onerror = reject;
             reader.readAsDataURL(file);
           });
-
           const res = await fetch('/.netlify/functions/upload-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              filename: file.name,
-              contentType: file.type || 'application/octet-stream',
-              dataBase64,
-            }),
+            body: JSON.stringify({ filename: file.name, contentType: file.type || 'application/octet-stream', dataBase64 }),
           });
           const result = await res.json();
-
           if (!result.success) {
             uploadStatus.style.color = 'var(--accent)';
             uploadStatus.textContent = `Upload failed: ${result.error}`;
             return;
           }
-
-          // Build a full URL (not just the path) since this will be used
-          // directly as an <img src> inside an email.
           const fullUrl = new URL(result.url, window.location.origin).href;
           imageInput.value = fullUrl;
           uploadStatus.style.color = '#1a6e3f';
@@ -827,14 +1088,7 @@ async function selectDraft(campaignId) {
           const res = await fetch('/.netlify/functions/update-campaign-ad', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messageId: data.messageId,
-              slotId: slot.slotId,
-              image,
-              link,
-              captionText,
-              advertiserName,
-            }),
+            body: JSON.stringify({ messageId: data.messageId, slotId: slot.slotId, image, link, captionText, advertiserName }),
           });
           const result = await res.json();
           if (!result.success) {
@@ -851,7 +1105,7 @@ async function selectDraft(campaignId) {
       });
     });
   } catch (err) {
-    adSlotsSection.innerHTML = `<p class="hint" style="color:var(--accent);">Could not load ad slots: ${err.message}</p>`;
+    adSlotsHeading.innerHTML = `<p class="hint" style="color:var(--accent);">Could not load ad slots: ${err.message}</p>`;
   }
 }
 </script>
