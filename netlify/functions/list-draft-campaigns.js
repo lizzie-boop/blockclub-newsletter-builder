@@ -13,7 +13,7 @@ exports.handler = async (event) => {
   const search = (event.queryStringParameters?.search || '').toLowerCase();
 
   try {
-    const url = `${baseUrl}/api/3/campaigns?orders[cdate]=DESC&limit=50`;
+    const url = `${baseUrl}/api/3/campaigns?orders[id]=DESC&limit=50`;
     const res = await fetch(url, { headers: { 'Api-Token': apiKey } });
     const text = await res.text();
     if (!res.ok) {
