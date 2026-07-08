@@ -29,6 +29,38 @@ function truncate(str = '', maxLen) {
   return str.length > maxLen ? str.slice(0, maxLen - 1).trim() + '…' : str;
 }
 
+// Server-side safety net: the frontend already sends sanitized HTML (only
+// <b>, <strong>, <a href="http(s)...">, <br> survive its own sanitizer), but
+// we re-enforce the same allowlist here in case this endpoint is ever hit
+// directly instead of through the form.
+function sanitizeIntroText(html = '') {
+  if (!html) return '';
+  let safe = html.replace(/<(?!\/?(b|strong|a|br)\b)[^>]*>/gi, '');
+  safe = safe.replace(/<a\s+([^>]*)>/gi, (match, attrs) => {
+    const hrefMatch = attrs.match(/href\s*=\s*"([^"]*)"/i);
+    let href = hrefMatch ? hrefMatch[1] : '';
+    if (!/^https?:\/\//i.test(href)) href = '';
+    return href
+      ? `<a href="${href}" target="_blank" rel="noopener">`
+      : '<a>';
+  });
+  return safe;
+}
+
+// Plain-text fallback: links become "text (URL)" since plain text can't be clickable.
+function stripHtmlToText(html = '') {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '$2 ($1)')
+    .replace(/<\/?(b|strong)>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .trim();
+}
+
 // ---------- Default built-in design (used when no template is selected) ----------
 
 function buildStoryBlockHtml(story) {
@@ -56,22 +88,11 @@ function buildStoryBlockHtml(story) {
 
 function buildIntroHtml(introText) {
   if (!introText) return '';
-  const paragraphs = introText
-    .split(/\n\s*\n/)
-    .map((p) => escapeHtml(p.trim()).replace(/\n/g, '<br>'))
-    .filter(Boolean);
-
-  const paragraphHtml = paragraphs
-    .map(
-      (p) =>
-        `<p style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#222;margin:0 0 14px 0;">${p}</p>`
-    )
-    .join('\n');
-
+  const safe = sanitizeIntroText(introText);
   return `
     <tr>
       <td style="padding-bottom:20px;">
-        ${paragraphHtml}
+        <p style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#222;margin:0 0 14px 0;">${safe}</p>
       </td>
     </tr>
   `;
@@ -111,7 +132,7 @@ function buildDefaultNewsletterHtml(campaignName, introText, stories) {
 
 function buildNewsletterText(campaignName, introText, stories) {
   const lines = stories.map((s) => `${s.headline}\n${s.link}\n`);
-  const intro = introText ? `${introText}\n\n` : '';
+  const intro = introText ? `${stripHtmlToText(introText)}\n\n` : '';
   return `${campaignName}\n\n${intro}${lines.join('\n')}`;
 }
 
@@ -142,16 +163,14 @@ function mergeIntoTemplate(templateHtml, templateCss, introText, stories) {
   let html = templateHtml;
 
   // 1. Intro / topper — replace the lorem ipsum body, keep greeting + sign-off.
-  const introReplacement = introText
-    ? escapeHtml(introText).replace(/\n/g, '<br>')
-    : '';
+  const introReplacement = introText ? sanitizeIntroText(introText) : '';
   html = html.split(TEMPLATE_INTRO_LOREM).join(introReplacement);
 
   // 2. Story slots — fill in sequentially. If there are more stories than
   //    slots, extras are silently dropped here; the caller reports this.
   let headlineIdx = 0;
   html = html.split(TEMPLATE_FILLER_HEADLINE).reduce((acc, segment, i, arr) => {
-    if (i === arr.length - 1) return acc + segment;
+    if (i === arr.length - 1) return acc + segment; // last segment, no replacement after it
     const story = stories[headlineIdx];
     headlineIdx++;
     const replacement = story

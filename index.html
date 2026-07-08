@@ -139,6 +139,35 @@
     border-radius: 4px;
     font-size: 14px;
   }
+  .editor-toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .editor-toolbar button {
+    background: #fff;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .editor-toolbar button:hover { background: #f0eee9; }
+  .rich-editor {
+    min-height: 80px;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 10px 12px;
+    background: #fff;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  .rich-editor:empty:before {
+    content: attr(data-placeholder);
+    color: #999;
+  }
 </style>
 </head>
 <body>
@@ -165,14 +194,17 @@
     <div class="hint">
       Optional — pick one of your custom ActiveCampaign templates. Leave as "Use default design" for the built-in layout.
     </div>
-    <div id="templatePreviewWrap" style="display:none;margin-top:10px;">
-      <textarea id="templatePreview" readonly style="min-height:160px;font-family:monospace;font-size:12px;background:#f7f7f5;"></textarea>
-    </div>
+    <div id="templateStatus" style="margin-top:8px;font-size:14px;"></div>
   </div>
 
   <div class="field">
-    <label for="introText">Newsletter Topper</label>
-    <textarea id="introText" placeholder="Write or paste your topper here. If submitting without a topper, please leave this blank, and follow up with Hannah or your editor" style="min-height:80px;"></textarea>
+    <label for="introEditor">Newsletter Topper</label>
+    <div class="editor-toolbar">
+      <button type="button" id="boldBtn" title="Bold"><b>B</b></button>
+      <button type="button" id="linkBtn" title="Add link">Link</button>
+      <button type="button" id="unlinkBtn" title="Remove link">Unlink</button>
+    </div>
+    <div id="introEditor" class="rich-editor" contenteditable="true" data-placeholder="Write or paste your topper here. If submitting without a topper, please leave this blank, and follow up with Hannah or your editor"></div>
   </div>
 
   <div class="field">
@@ -195,14 +227,71 @@ const storiesEl = document.getElementById('stories');
 const resultEl = document.getElementById('result');
 const listSelect = document.getElementById('listSelect');
 const templateSelect = document.getElementById('templateSelect');
-const templatePreviewWrap = document.getElementById('templatePreviewWrap');
-const templatePreview = document.getElementById('templatePreview');
+const templateStatus = document.getElementById('templateStatus');
+const introEditor = document.getElementById('introEditor');
+
+document.getElementById('boldBtn').addEventListener('click', () => {
+  introEditor.focus();
+  document.execCommand('bold');
+});
+document.getElementById('linkBtn').addEventListener('click', () => {
+  const url = prompt('Paste the link URL (must start with http:// or https://):');
+  if (!url) return;
+  introEditor.focus();
+  document.execCommand('createLink', false, url);
+});
+document.getElementById('unlinkBtn').addEventListener('click', () => {
+  introEditor.focus();
+  document.execCommand('unlink');
+});
+
+// Converts the contenteditable's DOM into a clean, limited HTML string —
+// only bold, links (http/https only), and line breaks survive. Anything
+// else (pasted styles, spans, images, etc.) gets flattened to plain text.
+function sanitizeIntroHtml(root) {
+  const allowed = new Set(['B', 'STRONG', 'A', 'BR']);
+
+  function walk(node) {
+    let out = '';
+    node.childNodes.forEach((child) => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        out += child.textContent
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        const tag = child.tagName;
+        if (tag === 'BR') {
+          out += '<br>';
+        } else if (tag === 'DIV' || tag === 'P') {
+          const inner = walk(child);
+          out += (out ? '<br>' : '') + inner;
+        } else if (tag === 'A' && allowed.has(tag)) {
+          let href = child.getAttribute('href') || '';
+          if (!/^https?:\/\//i.test(href)) href = '';
+          const inner = walk(child);
+          out += href
+            ? `<a href="${href.replace(/"/g, '&quot;')}" target="_blank" rel="noopener">${inner}</a>`
+            : inner;
+        } else if (allowed.has(tag)) {
+          out += `<${tag.toLowerCase()}>${walk(child)}</${tag.toLowerCase()}>`;
+        } else {
+          out += walk(child);
+        }
+      }
+    });
+    return out;
+  }
+
+  return walk(root).trim();
+}
 
 function setStatus(msg, kind) {
   statusEl.textContent = msg;
   statusEl.className = kind || '';
 }
 
+// --- Populate lists dropdown on load ---
 async function loadLists() {
   try {
     const res = await fetch('/.netlify/functions/list-lists');
@@ -219,6 +308,7 @@ async function loadLists() {
   }
 }
 
+// --- Populate templates dropdown on load ---
 async function loadTemplates() {
   try {
     const res = await fetch('/.netlify/functions/list-templates');
@@ -238,24 +328,31 @@ async function loadTemplates() {
       templateSelect.appendChild(opt);
     });
   } catch (err) {
-    // Silent fail — template selection is optional.
+    // Silent fail — template selection is optional/in-testing.
   }
 }
 
 templateSelect.addEventListener('change', async () => {
   const id = templateSelect.value;
   if (!id) {
-    templatePreviewWrap.style.display = 'none';
+    templateStatus.innerHTML = '';
     return;
   }
-  templatePreviewWrap.style.display = 'block';
-  templatePreview.value = 'Loading template HTML…';
+  templateStatus.style.color = 'var(--muted)';
+  templateStatus.textContent = 'Checking template…';
   try {
     const res = await fetch(`/.netlify/functions/get-template?id=${encodeURIComponent(id)}`);
     const data = await res.json();
-    templatePreview.value = data.content || data.error || '(empty)';
+    if (res.ok && data.content && !data.error) {
+      templateStatus.style.color = '#1a6e3f';
+      templateStatus.textContent = `✓ "${templateSelect.options[templateSelect.selectedIndex].text}" is ready to use`;
+    } else {
+      templateStatus.style.color = 'var(--accent)';
+      templateStatus.textContent = `This template couldn't be loaded — try the default design instead.`;
+    }
   } catch (err) {
-    templatePreview.value = `Error loading template: ${err.message}`;
+    templateStatus.style.color = 'var(--accent)';
+    templateStatus.textContent = `This template couldn't be loaded — try the default design instead.`;
   }
 });
 
@@ -306,7 +403,7 @@ function cardPlaceholder(text) {
 
 buildBtn.addEventListener('click', async () => {
   const campaignName = document.getElementById('campaignName').value.trim();
-  const introText = document.getElementById('introText').value.trim();
+  const introText = sanitizeIntroHtml(introEditor);
   const listId = listSelect.value;
   const rawLinks = document.getElementById('links').value
     .split('\n')
