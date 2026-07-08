@@ -33,7 +33,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const store = getStore('ad-images');
+    const store = getStore({ name: 'ad-images', siteID: process.env.NETLIFY_SITE_ID, token: process.env.NETLIFY_BLOBS_TOKEN });
     const key = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const buffer = Buffer.from(dataBase64, 'base64');
 

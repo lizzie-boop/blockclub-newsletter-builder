@@ -330,7 +330,7 @@ exports.handler = async (event) => {
     // Mark the pending record as completed rather than deleting it, so it
     // drops out of the active "to finalize" queue but stays visible as history.
     try {
-      const store = getStore('pending-newsletters');
+      const store = getStore({ name: 'pending-newsletters', siteID: process.env.NETLIFY_SITE_ID, token: process.env.NETLIFY_BLOBS_TOKEN });
       const existing = await store.get(id, { type: 'json' });
       if (existing) {
         await store.setJSON(id, {

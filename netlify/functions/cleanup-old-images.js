@@ -11,7 +11,7 @@ const RETENTION_DAYS = 120;
 
 exports.handler = async () => {
   try {
-    const store = getStore('ad-images');
+    const store = getStore({ name: 'ad-images', siteID: process.env.NETLIFY_SITE_ID, token: process.env.NETLIFY_BLOBS_TOKEN });
     const { blobs } = await store.list();
     const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
 

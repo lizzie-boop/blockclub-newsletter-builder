@@ -13,7 +13,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const store = getStore('ad-images');
+    const store = getStore({ name: 'ad-images', siteID: process.env.NETLIFY_SITE_ID, token: process.env.NETLIFY_BLOBS_TOKEN });
     const result = await store.getWithMetadata(key, { type: 'arrayBuffer' });
 
     if (!result) {

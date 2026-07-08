@@ -13,7 +13,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const store = getStore('pending-newsletters');
+    const store = getStore({ name: 'pending-newsletters', siteID: process.env.NETLIFY_SITE_ID, token: process.env.NETLIFY_BLOBS_TOKEN });
     const data = await store.get(id, { type: 'json' });
 
     if (!data) {

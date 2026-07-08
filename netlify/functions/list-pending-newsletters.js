@@ -9,7 +9,7 @@ const { getStore } = require('@netlify/blobs');
 
 exports.handler = async () => {
   try {
-    const store = getStore('pending-newsletters');
+    const store = getStore({ name: 'pending-newsletters', siteID: process.env.NETLIFY_SITE_ID, token: process.env.NETLIFY_BLOBS_TOKEN });
     const { blobs } = await store.list();
 
     const items = [];
