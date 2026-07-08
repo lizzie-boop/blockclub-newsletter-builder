@@ -252,7 +252,7 @@
 
   <div class="field">
     <label for="templateSelect">Template (optional)</label>
-    <select id="templateSelect"><option value="">Use default design</option></select>
+    <select id="templateSelect"><option value="">Neighborhood Template</option></select>
     <div class="hint">
       Optional — pick one of your custom ActiveCampaign templates. Leave as "Use default design" for the built-in layout.
     </div>
@@ -396,11 +396,14 @@ async function loadLists() {
   }
 }
 
+let allTemplates = [];
+
 async function loadTemplates() {
   try {
     const res = await fetch('/.netlify/functions/list-templates');
     const data = await res.json();
     if (!res.ok || !data.templates) return;
+    allTemplates = data.templates;
     if (data.templates.length === 0) {
       const opt = document.createElement('option');
       opt.value = '';
@@ -418,6 +421,47 @@ async function loadTemplates() {
     // Silent fail — template selection is optional.
   }
 }
+
+// Matches a list name to the best-fitting template by shared significant
+// words (e.g. "Logan Square, Humboldt Park & Avondale" list ↔ "Logan Square"
+// template). Ignores short/common words so things like "and" or "news"
+// don't create false matches.
+const IGNORED_WORDS = new Set(['news', 'newsletter', 'and', 'the', 'park']);
+
+function normalizeToWords(str) {
+  return (str || '')
+    .toLowerCase()
+    .replace(/[&,]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !IGNORED_WORDS.has(w));
+}
+
+function findBestTemplateMatch(listName) {
+  const listWords = new Set(normalizeToWords(listName));
+  let best = null;
+  let bestScore = 0;
+  allTemplates.forEach((t) => {
+    const tWords = normalizeToWords(t.name);
+    const score = tWords.filter((w) => listWords.has(w)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = t;
+    }
+  });
+  return best;
+}
+
+function autoSelectTemplateForList() {
+  const listName = listSelect.options[listSelect.selectedIndex]?.text;
+  if (!listName || allTemplates.length === 0) return;
+  const match = findBestTemplateMatch(listName);
+  if (match) {
+    templateSelect.value = match.id;
+    templateSelect.dispatchEvent(new Event('change'));
+  }
+}
+
+listSelect.addEventListener('change', autoSelectTemplateForList);
 
 templateSelect.addEventListener('change', async () => {
   const id = templateSelect.value;
@@ -443,8 +487,9 @@ templateSelect.addEventListener('change', async () => {
   }
 });
 
-loadLists();
-loadTemplates();
+Promise.all([loadLists(), loadTemplates()]).then(() => {
+  autoSelectTemplateForList();
+});
 
 function renderStoryCard(id, url) {
   const card = document.createElement('div');
