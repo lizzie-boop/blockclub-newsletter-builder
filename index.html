@@ -21,7 +21,7 @@
   }
   header {
     border-bottom: 3px solid var(--ink);
-    padding: 28px 24px 18px;
+    padding: 28px 24px 0;
   }
   header h1 {
     font-family: Georgia, "Times New Roman", serif;
@@ -30,9 +30,28 @@
     letter-spacing: -0.01em;
   }
   header p {
-    margin: 0;
+    margin: 0 0 18px;
     color: var(--muted);
     font-size: 14px;
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+  }
+  .tab-btn {
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    margin-bottom: -3px;
+  }
+  .tab-btn.active {
+    color: var(--ink);
+    border-bottom-color: var(--ink);
   }
   main {
     max-width: 720px;
@@ -64,7 +83,7 @@
   }
   .field { margin-bottom: 22px; }
   .hint { font-size: 13px; color: var(--muted); margin-top: 6px; }
-  button {
+  button.primary {
     background: var(--ink);
     color: #fff;
     border: none;
@@ -74,8 +93,8 @@
     border-radius: 3px;
     cursor: pointer;
   }
-  button:hover { background: #000; }
-  button:disabled { background: #999; cursor: not-allowed; }
+  button.primary:hover { background: #000; }
+  button.primary:disabled { background: #999; cursor: not-allowed; }
   #status {
     margin: 18px 0;
     font-size: 14px;
@@ -168,6 +187,43 @@
     content: attr(data-placeholder);
     color: #999;
   }
+  .draft-list {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: #fff;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .draft-row {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .draft-row:last-child { border-bottom: none; }
+  .draft-row:hover { background: #f7f5f0; }
+  .draft-row.selected { background: #eee7db; font-weight: 600; }
+  .draft-row .date { color: var(--muted); font-size: 12px; font-weight: normal; }
+  .ad-slot-card {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: #fff;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .ad-slot-card h4 {
+    margin: 0 0 4px;
+    font-size: 15px;
+  }
+  .ad-slot-card .current {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .ad-slot-card .field { margin-bottom: 14px; }
+  .ad-slot-status { font-size: 13px; margin-top: 8px; }
+  .ad-slot-status.success { color: #1a6e3f; }
+  .ad-slot-status.error { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -175,9 +231,15 @@
 <header>
   <h1>Newsletter Builder</h1>
   <p>Paste story links, get a draft campaign in ActiveCampaign.</p>
+  <div class="tabs">
+    <button type="button" class="tab-btn active" id="tabBuilderBtn">Newsletter Builder</button>
+    <button type="button" class="tab-btn" id="tabAdBtn">Ad Insertion</button>
+  </div>
 </header>
 
 <main>
+
+<div id="builderView">
   <div class="field">
     <label for="campaignName">Campaign name</label>
     <input type="text" id="campaignName" placeholder="e.g. Morning Edition — July 7" />
@@ -213,11 +275,23 @@
     <div class="hint">One link per line, in the order you want them to appear.</div>
   </div>
 
-  <button id="buildBtn">Build newsletter</button>
+  <button class="primary" id="buildBtn">Build newsletter</button>
 
   <div id="status"></div>
   <div class="stories" id="stories"></div>
   <div id="result"></div>
+</div>
+
+<div id="adView" style="display:none;">
+  <div class="field">
+    <label for="draftSearch">Find a draft newsletter</label>
+    <input type="text" id="draftSearch" placeholder="Search by campaign name…" />
+  </div>
+  <div class="draft-list" id="draftList"><div class="draft-row">Loading drafts…</div></div>
+
+  <div id="adSlotsSection" style="margin-top:28px;"></div>
+</div>
+
 </main>
 
 <script>
@@ -229,6 +303,26 @@ const listSelect = document.getElementById('listSelect');
 const templateSelect = document.getElementById('templateSelect');
 const templateStatus = document.getElementById('templateStatus');
 const introEditor = document.getElementById('introEditor');
+
+// --- Tab switching ---
+const tabBuilderBtn = document.getElementById('tabBuilderBtn');
+const tabAdBtn = document.getElementById('tabAdBtn');
+const builderView = document.getElementById('builderView');
+const adView = document.getElementById('adView');
+
+tabBuilderBtn.addEventListener('click', () => {
+  tabBuilderBtn.classList.add('active');
+  tabAdBtn.classList.remove('active');
+  builderView.style.display = 'block';
+  adView.style.display = 'none';
+});
+tabAdBtn.addEventListener('click', () => {
+  tabAdBtn.classList.add('active');
+  tabBuilderBtn.classList.remove('active');
+  adView.style.display = 'block';
+  builderView.style.display = 'none';
+  if (!draftsLoaded) loadDraftCampaigns();
+});
 
 document.getElementById('boldBtn').addEventListener('click', () => {
   introEditor.focus();
@@ -245,9 +339,6 @@ document.getElementById('unlinkBtn').addEventListener('click', () => {
   document.execCommand('unlink');
 });
 
-// Converts the contenteditable's DOM into a clean, limited HTML string —
-// only bold, links (http/https only), and line breaks survive. Anything
-// else (pasted styles, spans, images, etc.) gets flattened to plain text.
 function sanitizeIntroHtml(root) {
   const allowed = new Set(['B', 'STRONG', 'A', 'BR']);
 
@@ -291,7 +382,6 @@ function setStatus(msg, kind) {
   statusEl.className = kind || '';
 }
 
-// --- Populate lists dropdown on load ---
 async function loadLists() {
   try {
     const res = await fetch('/.netlify/functions/list-lists');
@@ -308,7 +398,6 @@ async function loadLists() {
   }
 }
 
-// --- Populate templates dropdown on load ---
 async function loadTemplates() {
   try {
     const res = await fetch('/.netlify/functions/list-templates');
@@ -328,7 +417,7 @@ async function loadTemplates() {
       templateSelect.appendChild(opt);
     });
   } catch (err) {
-    // Silent fail — template selection is optional/in-testing.
+    // Silent fail — template selection is optional.
   }
 }
 
@@ -486,6 +575,152 @@ buildBtn.addEventListener('click', async () => {
 
   buildBtn.disabled = false;
 });
+
+// ---------- Ad Insertion tab ----------
+
+let draftsLoaded = false;
+let allDrafts = [];
+const draftList = document.getElementById('draftList');
+const draftSearch = document.getElementById('draftSearch');
+const adSlotsSection = document.getElementById('adSlotsSection');
+let selectedCampaignId = null;
+
+async function loadDraftCampaigns() {
+  draftList.innerHTML = '<div class="draft-row">Loading drafts…</div>';
+  try {
+    const res = await fetch('/.netlify/functions/list-draft-campaigns');
+    const data = await res.json();
+    if (!res.ok || !data.campaigns) {
+      draftList.innerHTML = '<div class="draft-row">Could not load drafts.</div>';
+      return;
+    }
+    allDrafts = data.campaigns;
+    draftsLoaded = true;
+    renderDraftList(allDrafts);
+  } catch (err) {
+    draftList.innerHTML = '<div class="draft-row">Could not load drafts.</div>';
+  }
+}
+
+function renderDraftList(drafts) {
+  if (drafts.length === 0) {
+    draftList.innerHTML = '<div class="draft-row">No matching drafts found.</div>';
+    return;
+  }
+  draftList.innerHTML = drafts
+    .map((d) => {
+      const date = d.cdate ? new Date(d.cdate).toLocaleDateString() : '';
+      return `<div class="draft-row" data-id="${d.id}">${d.name} <span class="date">${date}</span></div>`;
+    })
+    .join('');
+
+  draftList.querySelectorAll('.draft-row[data-id]').forEach((row) => {
+    row.addEventListener('click', () => selectDraft(row.dataset.id, row));
+  });
+}
+
+draftSearch.addEventListener('input', () => {
+  const q = draftSearch.value.toLowerCase();
+  renderDraftList(allDrafts.filter((d) => d.name.toLowerCase().includes(q)));
+});
+
+async function selectDraft(campaignId, rowEl) {
+  document.querySelectorAll('.draft-row').forEach((r) => r.classList.remove('selected'));
+  rowEl?.classList.add('selected');
+  selectedCampaignId = campaignId;
+
+  adSlotsSection.innerHTML = '<p class="hint">Loading ad slots…</p>';
+
+  try {
+    const res = await fetch(`/.netlify/functions/get-campaign-ad-slots?campaignId=${encodeURIComponent(campaignId)}`);
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      adSlotsSection.innerHTML = `<p class="hint" style="color:var(--accent);">Could not load ad slots: ${data.error || 'unknown error'}</p>`;
+      return;
+    }
+
+    if (!data.slots || data.slots.length === 0) {
+      adSlotsSection.innerHTML = `<p class="hint">No ad slots found in "${data.campaignName}". This draft may have been created before ad slots were supported, or its design doesn't include one.</p>`;
+      return;
+    }
+
+    adSlotsSection.innerHTML = `<h3 style="font-family:Georgia,serif;font-size:18px;margin-bottom:14px;">Ad slots in "${data.campaignName}"</h3>`;
+
+    data.slots.forEach((slot, i) => {
+      const card = document.createElement('div');
+      card.className = 'ad-slot-card';
+      card.innerHTML = `
+        <h4>Slot: ${slot.slotId}</h4>
+        <div class="current">${slot.description}</div>
+        <div class="field">
+          <label>Advertiser name</label>
+          <input type="text" class="advertiserInput" placeholder="e.g. Half Acre Beer Co." />
+        </div>
+        <div class="field">
+          <label>Image URL</label>
+          <input type="text" class="imageInput" placeholder="https://…" />
+        </div>
+        <div class="field">
+          <label>Link URL</label>
+          <input type="text" class="linkInput" placeholder="https://…" />
+        </div>
+        <div class="field">
+          <label>Caption text (optional)</label>
+          <input type="text" class="captionInput" placeholder="Short line shown under the ad" />
+        </div>
+        <button class="primary saveAdBtn">Save ad</button>
+        <div class="ad-slot-status"></div>
+      `;
+      adSlotsSection.appendChild(card);
+
+      card.querySelector('.saveAdBtn').addEventListener('click', async () => {
+        const advertiserName = card.querySelector('.advertiserInput').value.trim();
+        const image = card.querySelector('.imageInput').value.trim();
+        const link = card.querySelector('.linkInput').value.trim();
+        const captionText = card.querySelector('.captionInput').value.trim();
+        const statusDiv = card.querySelector('.ad-slot-status');
+
+        if (!image || !link) {
+          statusDiv.className = 'ad-slot-status error';
+          statusDiv.textContent = 'Image URL and Link URL are required.';
+          return;
+        }
+
+        statusDiv.className = 'ad-slot-status';
+        statusDiv.textContent = 'Saving…';
+
+        try {
+          const res = await fetch('/.netlify/functions/update-campaign-ad', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messageId: data.messageId,
+              slotId: slot.slotId,
+              image,
+              link,
+              captionText,
+              advertiserName,
+            }),
+          });
+          const result = await res.json();
+          if (!result.success) {
+            statusDiv.className = 'ad-slot-status error';
+            statusDiv.textContent = `Error: ${result.error}`;
+          } else {
+            statusDiv.className = 'ad-slot-status success';
+            statusDiv.textContent = '✓ Ad saved. Open the draft in ActiveCampaign to review.';
+          }
+        } catch (err) {
+          statusDiv.className = 'ad-slot-status error';
+          statusDiv.textContent = `Error: ${err.message}`;
+        }
+      });
+    });
+  } catch (err) {
+    adSlotsSection.innerHTML = `<p class="hint" style="color:var(--accent);">Could not load ad slots: ${err.message}</p>`;
+  }
+}
 </script>
 
 </body>

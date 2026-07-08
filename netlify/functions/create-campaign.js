@@ -100,9 +100,9 @@ function buildIntroHtml(introText) {
 
 function buildDefaultNewsletterHtml(campaignName, introText, stories) {
   const storyBlocksWithSlots = stories
-    .map((story, i) => `<!-- AD-SLOT-${i} -->\n${buildStoryBlockHtml(story)}`)
+    .map((story, i) => `<!-- AD-SLOT-${i}-START --><!-- AD-SLOT-${i}-END -->\n${buildStoryBlockHtml(story)}`)
     .join('\n');
-  const finalSlot = `<!-- AD-SLOT-${stories.length} -->`;
+  const finalSlot = `<!-- AD-SLOT-${stories.length}-START --><!-- AD-SLOT-${stories.length}-END -->`;
   const introHtml = buildIntroHtml(introText);
 
   return `
@@ -197,6 +197,21 @@ function mergeIntoTemplate(templateHtml, templateCss, introText, stories) {
     imageIdx++;
     if (!story || !story.image) return match;
     return `<img class="adapt-img" src="${escapeHtml(story.image)}" alt="${escapeHtml(story.headline)}" style="display:block;width:100%;max-width:245px;" width="245">`;
+  });
+
+  // 4. Wrap the template's existing "SPONSORED" house-ad block (currently a
+  //    self-promotional ad linking to ads@blockclubchi.org) with paired
+  //    markers, so the ad-insertion tool can find and replace it with a real
+  //    paid ad. If no real ad is ever inserted, the house ad stays as-is.
+  //    NOTE: this matches on the "mailto:ads@blockclubchi.org" link, which
+  //    appears to be consistent across Block Club's templates — verify this
+  //    holds if a template doesn't use that exact address.
+  let templateAdIdx = 0;
+  const TEMPLATE_AD_BLOCK_REGEX = /<a[^>]*href="mailto:ads@blockclubchi\.org"[^>]*>[\s\S]*?<\/a>/g;
+  html = html.replace(TEMPLATE_AD_BLOCK_REGEX, (match) => {
+    const wrapped = `<!-- AD-SLOT-TEMPLATE-${templateAdIdx}-START -->${match}<!-- AD-SLOT-TEMPLATE-${templateAdIdx}-END -->`;
+    templateAdIdx++;
+    return wrapped;
   });
 
   // 3. Inject the template's CSS into <head> so it actually applies.
