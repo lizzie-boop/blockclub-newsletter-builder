@@ -678,17 +678,17 @@ async function selectDraft(campaignId) {
 
     adSlotsSection.innerHTML = `<h3 style="font-family:Georgia,serif;font-size:18px;margin-bottom:14px;">Ad slots in "${data.campaignName}"</h3>`;
 
-    if (data.screenshot) {
-      const previewWrap = document.createElement('div');
-      previewWrap.style.marginBottom = '20px';
-      previewWrap.innerHTML = `
-        <div class="hint" style="margin-bottom:6px;">Preview of this draft as it currently looks:</div>
-        <a href="${data.screenshot}" target="_blank" rel="noopener">
-          <img src="${data.screenshot}" alt="Preview of ${data.campaignName}" style="max-width:100%;border:1px solid var(--rule);border-radius:4px;display:block;">
-        </a>
-      `;
-      adSlotsSection.appendChild(previewWrap);
-    }
+    const previewUrl = `/.netlify/functions/preview-campaign?campaignId=${encodeURIComponent(campaignId)}`;
+    const previewWrap = document.createElement('div');
+    previewWrap.style.marginBottom = '20px';
+    previewWrap.innerHTML = `
+      <div class="hint" style="margin-bottom:6px;">
+        Live preview of this draft as it currently looks —
+        <a href="${previewUrl}" target="_blank" rel="noopener">open full-size in a new tab</a>
+      </div>
+      <iframe src="${previewUrl}" style="width:100%;height:600px;border:1px solid var(--rule);border-radius:4px;background:#fff;"></iframe>
+    `;
+    adSlotsSection.appendChild(previewWrap);
 
     data.slots.forEach((slot, i) => {
       const card = document.createElement('div');
