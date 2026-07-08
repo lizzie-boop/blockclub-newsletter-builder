@@ -50,8 +50,16 @@ exports.handler = async (event) => {
     const campaign = campaignData.campaign || campaignData;
     const messageId = campaign.message_id;
 
+    // ActiveCampaign auto-generates a screenshot of the campaign's actual
+    // rendered content. The field is sometimes a protocol-relative URL
+    // (starting with "//"), so normalize it to a proper https:// URL.
+    let screenshot = campaign.screenshot || null;
+    if (screenshot && screenshot.startsWith('//')) {
+      screenshot = `https:${screenshot}`;
+    }
+
     if (!messageId) {
-      return { statusCode: 200, body: JSON.stringify({ campaignName: campaign.name, messageId: null, slots: [] }) };
+      return { statusCode: 200, body: JSON.stringify({ campaignName: campaign.name, messageId: null, slots: [], screenshot }) };
     }
 
     const msgData = await acGet(baseUrl, apiKey, `messages/${messageId}`);
@@ -73,6 +81,7 @@ exports.handler = async (event) => {
         campaignName: campaign.name,
         messageId,
         slots,
+        screenshot,
       }),
     };
   } catch (err) {
