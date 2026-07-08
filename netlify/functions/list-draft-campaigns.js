@@ -20,10 +20,8 @@ exports.handler = async (event) => {
       return { statusCode: res.status, body: JSON.stringify({ error: text }) };
     }
     const data = JSON.parse(text);
-    const rawCampaigns = data.campaigns || [];
-
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    let campaigns = rawCampaigns
+    let campaigns = (data.campaigns || [])
       .map((c) => ({
         id: c.id,
         name: c.name,
@@ -33,21 +31,11 @@ exports.handler = async (event) => {
       .filter((c) => c.cdate && new Date(c.cdate) >= thirtyDaysAgo)
       .filter((c) => c.status !== '5');
 
-    // TEMPORARY DEBUG INFO — remove once the filtering issue is sorted out.
-    const debug = {
-      totalRawCampaigns: rawCampaigns.length,
-      sampleRaw: rawCampaigns.slice(0, 10).map((c) => ({
-        name: c.name,
-        status: c.status,
-        cdate: c.cdate,
-      })),
-    };
-
     if (search) {
       campaigns = campaigns.filter((c) => c.name.toLowerCase().includes(search));
     }
 
-    return { statusCode: 200, body: JSON.stringify({ campaigns: campaigns.slice(0, 50), debug }) };
+    return { statusCode: 200, body: JSON.stringify({ campaigns: campaigns.slice(0, 50) }) };
   } catch (err) {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
