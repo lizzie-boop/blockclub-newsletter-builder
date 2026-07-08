@@ -284,10 +284,9 @@
 
 <div id="adView" style="display:none;">
   <div class="field">
-    <label for="draftSearch">Find a draft newsletter</label>
-    <input type="text" id="draftSearch" placeholder="Search by campaign name…" />
+    <label for="draftSelect">Find a draft newsletter</label>
+    <select id="draftSelect"><option value="">Loading drafts…</option></select>
   </div>
-  <div class="draft-list" id="draftList"><div class="draft-row">Loading drafts…</div></div>
 
   <div id="adSlotsSection" style="margin-top:28px;"></div>
 </div>
@@ -321,7 +320,6 @@ tabAdBtn.addEventListener('click', () => {
   tabBuilderBtn.classList.remove('active');
   adView.style.display = 'block';
   builderView.style.display = 'none';
-  if (!draftsLoaded) loadDraftCampaigns();
 });
 
 document.getElementById('boldBtn').addEventListener('click', () => {
@@ -578,55 +576,43 @@ buildBtn.addEventListener('click', async () => {
 
 // ---------- Ad Insertion tab ----------
 
-let draftsLoaded = false;
 let allDrafts = [];
-const draftList = document.getElementById('draftList');
-const draftSearch = document.getElementById('draftSearch');
+const draftSelect = document.getElementById('draftSelect');
 const adSlotsSection = document.getElementById('adSlotsSection');
 let selectedCampaignId = null;
 
 async function loadDraftCampaigns() {
-  draftList.innerHTML = '<div class="draft-row">Loading drafts…</div>';
   try {
     const res = await fetch('/.netlify/functions/list-draft-campaigns');
     const data = await res.json();
     if (!res.ok || !data.campaigns) {
-      draftList.innerHTML = '<div class="draft-row">Could not load drafts.</div>';
+      draftSelect.innerHTML = '<option value="">Could not load drafts</option>';
       return;
     }
     allDrafts = data.campaigns;
-    draftsLoaded = true;
-    renderDraftList(allDrafts);
+    draftSelect.innerHTML =
+      '<option value="">Select a draft…</option>' +
+      allDrafts
+        .map((d) => {
+          const date = d.cdate ? new Date(d.cdate).toLocaleDateString() : '';
+          return `<option value="${d.id}">${d.name}${date ? ' — ' + date : ''}</option>`;
+        })
+        .join('');
   } catch (err) {
-    draftList.innerHTML = '<div class="draft-row">Could not load drafts.</div>';
+    draftSelect.innerHTML = '<option value="">Could not load drafts</option>';
   }
 }
 
-function renderDraftList(drafts) {
-  if (drafts.length === 0) {
-    draftList.innerHTML = '<div class="draft-row">No matching drafts found.</div>';
-    return;
-  }
-  draftList.innerHTML = drafts
-    .map((d) => {
-      const date = d.cdate ? new Date(d.cdate).toLocaleDateString() : '';
-      return `<div class="draft-row" data-id="${d.id}">${d.name} <span class="date">${date}</span></div>`;
-    })
-    .join('');
+// Load immediately on page load (not on tab click) so the dropdown is
+// already populated the moment someone switches to this tab.
+loadDraftCampaigns();
 
-  draftList.querySelectorAll('.draft-row[data-id]').forEach((row) => {
-    row.addEventListener('click', () => selectDraft(row.dataset.id, row));
-  });
-}
-
-draftSearch.addEventListener('input', () => {
-  const q = draftSearch.value.toLowerCase();
-  renderDraftList(allDrafts.filter((d) => d.name.toLowerCase().includes(q)));
+draftSelect.addEventListener('change', () => {
+  if (draftSelect.value) selectDraft(draftSelect.value);
+  else adSlotsSection.innerHTML = '';
 });
 
-async function selectDraft(campaignId, rowEl) {
-  document.querySelectorAll('.draft-row').forEach((r) => r.classList.remove('selected'));
-  rowEl?.classList.add('selected');
+async function selectDraft(campaignId) {
   selectedCampaignId = campaignId;
 
   adSlotsSection.innerHTML = '<p class="hint">Loading ad slots…</p>';
