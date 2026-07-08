@@ -13,11 +13,6 @@ exports.handler = async (event) => {
   const search = (event.queryStringParameters?.search || '').toLowerCase();
 
   try {
-    // Fetch without a status filter, then exclude only sent campaigns
-    // (status 5, confirmed from real data) client-side. A strict
-    // filters[status]=0 missed manually-created drafts in ActiveCampaign's
-    // own UI, which appear to sit at a different in-progress status while
-    // still being built, not exactly 0.
     const url = `${baseUrl}/api/3/campaigns?orders[cdate]=DESC&limit=50`;
     const res = await fetch(url, { headers: { 'Api-Token': apiKey } });
     const text = await res.text();
@@ -25,8 +20,10 @@ exports.handler = async (event) => {
       return { statusCode: res.status, body: JSON.stringify({ error: text }) };
     }
     const data = JSON.parse(text);
+    const rawCampaigns = data.campaigns || [];
+
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    let campaigns = (data.campaigns || [])
+    let campaigns = rawCampaigns
       .map((c) => ({
         id: c.id,
         name: c.name,
@@ -36,11 +33,21 @@ exports.handler = async (event) => {
       .filter((c) => c.cdate && new Date(c.cdate) >= thirtyDaysAgo)
       .filter((c) => c.status !== '5');
 
+    // TEMPORARY DEBUG INFO — remove once the filtering issue is sorted out.
+    const debug = {
+      totalRawCampaigns: rawCampaigns.length,
+      sampleRaw: rawCampaigns.slice(0, 10).map((c) => ({
+        name: c.name,
+        status: c.status,
+        cdate: c.cdate,
+      })),
+    };
+
     if (search) {
       campaigns = campaigns.filter((c) => c.name.toLowerCase().includes(search));
     }
 
-    return { statusCode: 200, body: JSON.stringify({ campaigns: campaigns.slice(0, 50) }) };
+    return { statusCode: 200, body: JSON.stringify({ campaigns: campaigns.slice(0, 50), debug }) };
   } catch (err) {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
