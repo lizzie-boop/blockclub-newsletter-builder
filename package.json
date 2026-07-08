@@ -5,5 +5,8 @@
   "description": "Staff tool: paste story links, get a draft ActiveCampaign newsletter with headlines and lead images pulled from blockclubchicago.org.",
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.7.0"
   }
 }

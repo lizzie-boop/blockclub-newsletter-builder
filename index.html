@@ -742,6 +742,9 @@ async function selectDraft(campaignId) {
         <div class="field">
           <label>Image URL</label>
           <input type="text" class="imageInput" placeholder="https://…" />
+          <div class="hint" style="margin-top:8px;">Or upload an image (stored for 120 days):</div>
+          <input type="file" class="imageFileInput" accept="image/*" style="margin-top:6px;" />
+          <div class="upload-status" style="font-size:13px;margin-top:4px;"></div>
         </div>
         <div class="field">
           <label>Link URL</label>
@@ -755,6 +758,54 @@ async function selectDraft(campaignId) {
         <div class="ad-slot-status"></div>
       `;
       adSlotsSection.appendChild(card);
+
+      const fileInput = card.querySelector('.imageFileInput');
+      const uploadStatus = card.querySelector('.upload-status');
+      const imageInput = card.querySelector('.imageInput');
+
+      fileInput.addEventListener('change', async () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        uploadStatus.style.color = 'var(--muted)';
+        uploadStatus.textContent = 'Uploading…';
+
+        try {
+          const dataBase64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          const res = await fetch('/.netlify/functions/upload-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              contentType: file.type || 'application/octet-stream',
+              dataBase64,
+            }),
+          });
+          const result = await res.json();
+
+          if (!result.success) {
+            uploadStatus.style.color = 'var(--accent)';
+            uploadStatus.textContent = `Upload failed: ${result.error}`;
+            return;
+          }
+
+          // Build a full URL (not just the path) since this will be used
+          // directly as an <img src> inside an email.
+          const fullUrl = new URL(result.url, window.location.origin).href;
+          imageInput.value = fullUrl;
+          uploadStatus.style.color = '#1a6e3f';
+          uploadStatus.textContent = '✓ Uploaded — Image URL field filled in above.';
+        } catch (err) {
+          uploadStatus.style.color = 'var(--accent)';
+          uploadStatus.textContent = `Upload failed: ${err.message}`;
+        }
+      });
 
       card.querySelector('.saveAdBtn').addEventListener('click', async () => {
         const advertiserName = card.querySelector('.advertiserInput').value.trim();
