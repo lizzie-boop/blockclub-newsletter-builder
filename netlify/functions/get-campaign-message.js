@@ -36,37 +36,27 @@ exports.handler = async (event) => {
 
   try {
     const campaignData = await acGet(baseUrl, apiKey, `campaigns/${encodeURIComponent(campaignId)}`);
+    const campaign = campaignData.campaign || campaignData;
+    const messageId = campaign.message_id;
 
-    let messagesData = null;
-    let messagesError = null;
-    try {
-      messagesData = await acGet(baseUrl, apiKey, `campaigns/${encodeURIComponent(campaignId)}/messages`);
-    } catch (err) {
-      messagesError = err.message;
-    }
-
-    let fullMessages = [];
-    if (messagesData?.campaignMessages) {
-      for (const cm of messagesData.campaignMessages) {
-        const msgId = cm.messageid || cm.message?.id;
-        if (msgId) {
-          try {
-            const msgData = await acGet(baseUrl, apiKey, `messages/${msgId}`);
-            fullMessages.push({ id: msgId, html: msgData.message?.html, text: msgData.message?.text });
-          } catch (err) {
-            fullMessages.push({ id: msgId, error: err.message });
-          }
-        }
+    let message = null;
+    let messageError = null;
+    if (messageId) {
+      try {
+        const msgData = await acGet(baseUrl, apiKey, `messages/${messageId}`);
+        message = { id: messageId, html: msgData.message?.html, text: msgData.message?.text };
+      } catch (err) {
+        messageError = err.message;
       }
     }
 
     return {
       statusCode: 200,
       body: JSON.stringify({
-        campaign: campaignData.campaign || campaignData,
-        messagesRelationship: messagesData,
-        messagesRelationshipError: messagesError,
-        fullMessages,
+        campaignName: campaign.name,
+        messageId,
+        message,
+        messageError,
       }),
     };
   } catch (err) {
