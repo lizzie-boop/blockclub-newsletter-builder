@@ -160,10 +160,10 @@
   </div>
 
   <div class="field">
-    <label for="templateSelect">Template (optional, in testing)</label>
+    <label for="templateSelect">Template (optional)</label>
     <select id="templateSelect"><option value="">Use default design</option></select>
     <div class="hint">
-      Template selection isn't wired into newsletter creation yet — pick one here to preview its raw HTML below, so we can figure out how to merge content into it.
+      Optional — pick one of your custom ActiveCampaign templates. Leave as "Use default design" for the built-in layout.
     </div>
     <div id="templatePreviewWrap" style="display:none;margin-top:10px;">
       <textarea id="templatePreview" readonly style="min-height:160px;font-family:monospace;font-size:12px;background:#f7f7f5;"></textarea>
@@ -203,7 +203,6 @@ function setStatus(msg, kind) {
   statusEl.className = kind || '';
 }
 
-// --- Populate lists dropdown on load ---
 async function loadLists() {
   try {
     const res = await fetch('/.netlify/functions/list-lists');
@@ -220,7 +219,6 @@ async function loadLists() {
   }
 }
 
-// --- Populate templates dropdown on load ---
 async function loadTemplates() {
   try {
     const res = await fetch('/.netlify/functions/list-templates');
@@ -240,7 +238,7 @@ async function loadTemplates() {
       templateSelect.appendChild(opt);
     });
   } catch (err) {
-    // Silent fail — template selection is optional/in-testing.
+    // Silent fail — template selection is optional.
   }
 }
 
@@ -369,7 +367,7 @@ buildBtn.addEventListener('click', async () => {
     const res = await fetch('/.netlify/functions/create-campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ campaignName, introText, listId, stories: resolved }),
+      body: JSON.stringify({ campaignName, introText, listId, templateId: templateSelect.value, stories: resolved }),
     });
     const data = await res.json();
 
@@ -381,6 +379,7 @@ buildBtn.addEventListener('click', async () => {
         <footer class="result">
           Draft "<strong>${campaignName}</strong>" was created in ActiveCampaign with ${resolved.length} ${resolved.length === 1 ? 'story' : 'stories'}.
           Open ActiveCampaign → Campaigns to review, edit, and send it.
+          ${data.slotWarning ? `<p style="color:#b3312c;margin-top:10px;">${data.slotWarning}</p>` : ''}
         </footer>
       `;
     }
