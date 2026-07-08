@@ -224,6 +224,26 @@
   .ad-slot-status { font-size: 13px; margin-top: 8px; }
   .ad-slot-status.success { color: #1a6e3f; }
   .ad-slot-status.error { color: var(--accent); }
+  .ad-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    margin-top: 20px;
+  }
+  .ad-preview-col {
+    flex: 1 1 50%;
+    min-width: 0;
+    position: sticky;
+    top: 20px;
+  }
+  .ad-slots-col {
+    flex: 1 1 50%;
+    min-width: 0;
+  }
+  @media (max-width: 900px) {
+    .ad-layout { flex-direction: column; }
+    .ad-preview-col { position: static; }
+  }
 </style>
 </head>
 <body>
@@ -288,7 +308,11 @@
     <select id="draftSelect"><option value="">Loading drafts…</option></select>
   </div>
 
-  <div id="adSlotsSection" style="margin-top:28px;"></div>
+  <div id="adSlotsHeading"></div>
+  <div class="ad-layout" id="adLayout" style="display:none;">
+    <div class="ad-preview-col" id="adPreviewCol"></div>
+    <div class="ad-slots-col" id="adSlotsSection"></div>
+  </div>
 </div>
 
 </main>
@@ -309,17 +333,21 @@ const tabAdBtn = document.getElementById('tabAdBtn');
 const builderView = document.getElementById('builderView');
 const adView = document.getElementById('adView');
 
+const mainEl = document.querySelector('main');
+
 tabBuilderBtn.addEventListener('click', () => {
   tabBuilderBtn.classList.add('active');
   tabAdBtn.classList.remove('active');
   builderView.style.display = 'block';
   adView.style.display = 'none';
+  mainEl.style.maxWidth = '720px';
 });
 tabAdBtn.addEventListener('click', () => {
   tabAdBtn.classList.add('active');
   tabBuilderBtn.classList.remove('active');
   adView.style.display = 'block';
   builderView.style.display = 'none';
+  mainEl.style.maxWidth = '1100px';
 });
 
 document.getElementById('boldBtn').addEventListener('click', () => {
@@ -652,43 +680,54 @@ async function loadDraftCampaigns() {
 // already populated the moment someone switches to this tab.
 loadDraftCampaigns();
 
+const adSlotsHeading = document.getElementById('adSlotsHeading');
+const adPreviewCol = document.getElementById('adPreviewCol');
+const adLayout = document.getElementById('adLayout');
+
 draftSelect.addEventListener('change', () => {
-  if (draftSelect.value) selectDraft(draftSelect.value);
-  else adSlotsSection.innerHTML = '';
+  if (draftSelect.value) {
+    selectDraft(draftSelect.value);
+  } else {
+    adSlotsHeading.innerHTML = '';
+    adPreviewCol.innerHTML = '';
+    adSlotsSection.innerHTML = '';
+    adLayout.style.display = 'none';
+  }
 });
 
 async function selectDraft(campaignId) {
   selectedCampaignId = campaignId;
 
-  adSlotsSection.innerHTML = '<p class="hint">Loading ad slots…</p>';
+  adLayout.style.display = 'none';
+  adSlotsHeading.innerHTML = '<p class="hint">Loading ad slots…</p>';
+  adPreviewCol.innerHTML = '';
+  adSlotsSection.innerHTML = '';
 
   try {
     const res = await fetch(`/.netlify/functions/get-campaign-ad-slots?campaignId=${encodeURIComponent(campaignId)}`);
     const data = await res.json();
 
     if (!res.ok || data.error) {
-      adSlotsSection.innerHTML = `<p class="hint" style="color:var(--accent);">Could not load ad slots: ${data.error || 'unknown error'}</p>`;
+      adSlotsHeading.innerHTML = `<p class="hint" style="color:var(--accent);">Could not load ad slots: ${data.error || 'unknown error'}</p>`;
       return;
     }
 
     if (!data.slots || data.slots.length === 0) {
-      adSlotsSection.innerHTML = `<p class="hint">No ad slots found in "${data.campaignName}". This draft may have been created before ad slots were supported, or its design doesn't include one.</p>`;
+      adSlotsHeading.innerHTML = `<p class="hint">No ad slots found in "${data.campaignName}". This draft may have been created before ad slots were supported, or its design doesn't include one.</p>`;
       return;
     }
 
-    adSlotsSection.innerHTML = `<h3 style="font-family:Georgia,serif;font-size:18px;margin-bottom:14px;">Ad slots in "${data.campaignName}"</h3>`;
+    adSlotsHeading.innerHTML = `<h3 style="font-family:Georgia,serif;font-size:18px;margin:20px 0 4px;">Ad slots in "${data.campaignName}"</h3>`;
+    adLayout.style.display = 'flex';
 
     const previewUrl = `/.netlify/functions/preview-campaign?campaignId=${encodeURIComponent(campaignId)}`;
-    const previewWrap = document.createElement('div');
-    previewWrap.style.marginBottom = '20px';
-    previewWrap.innerHTML = `
+    adPreviewCol.innerHTML = `
       <div class="hint" style="margin-bottom:6px;">
         Live preview of this draft as it currently looks —
         <a href="${previewUrl}" target="_blank" rel="noopener">open full-size in a new tab</a>
       </div>
       <iframe src="${previewUrl}" style="width:100%;height:600px;border:1px solid var(--rule);border-radius:4px;background:#fff;"></iframe>
     `;
-    adSlotsSection.appendChild(previewWrap);
 
     data.slots.forEach((slot, i) => {
       const card = document.createElement('div');
