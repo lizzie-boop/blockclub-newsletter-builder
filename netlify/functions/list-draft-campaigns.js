@@ -13,7 +13,12 @@ exports.handler = async (event) => {
   const search = (event.queryStringParameters?.search || '').toLowerCase();
 
   try {
-    const url = `${baseUrl}/api/3/campaigns?filters[status]=0&orders[cdate]=DESC&limit=50`;
+    // Fetch without a status filter, then exclude only sent campaigns
+    // (status 5, confirmed from real data) client-side. A strict
+    // filters[status]=0 missed manually-created drafts in ActiveCampaign's
+    // own UI, which appear to sit at a different in-progress status while
+    // still being built, not exactly 0.
+    const url = `${baseUrl}/api/3/campaigns?orders[cdate]=DESC&limit=50`;
     const res = await fetch(url, { headers: { 'Api-Token': apiKey } });
     const text = await res.text();
     if (!res.ok) {
@@ -26,8 +31,10 @@ exports.handler = async (event) => {
         id: c.id,
         name: c.name,
         cdate: c.cdate,
+        status: c.status,
       }))
-      .filter((c) => c.cdate && new Date(c.cdate) >= thirtyDaysAgo);
+      .filter((c) => c.cdate && new Date(c.cdate) >= thirtyDaysAgo)
+      .filter((c) => c.status !== '5');
 
     if (search) {
       campaigns = campaigns.filter((c) => c.name.toLowerCase().includes(search));
