@@ -200,14 +200,16 @@ function mergeIntoTemplate(templateHtml, templateCss, introText, stories) {
   });
 
   // 4. Wrap the template's existing "SPONSORED" house-ad block (currently a
-  //    self-promotional ad linking to ads@blockclubchi.org) with paired
-  //    markers, so the ad-insertion tool can find and replace it with a real
-  //    paid ad. If no real ad is ever inserted, the house ad stays as-is.
-  //    NOTE: this matches on the "mailto:ads@blockclubchi.org" link, which
-  //    appears to be consistent across Block Club's templates — verify this
-  //    holds if a template doesn't use that exact address.
+  //    self-promotional ad) with paired markers, so the ad-insertion tool
+  //    can find and replace it with a real paid ad. If no real ad is ever
+  //    inserted, the house ad stays as-is.
+  //    NOTE: originally this matched on the "mailto:ads@blockclubchi.org"
+  //    link, but testing showed that href isn't always present on the
+  //    anchor tag (varies by template/edit history). The house-ad IMAGE
+  //    itself (same file, id cbc69502-35fb-4e20-83c2-c5ab9e010862) has
+  //    proven more reliably present, so we anchor on that instead.
   let templateAdIdx = 0;
-  const TEMPLATE_AD_BLOCK_REGEX = /<a[^>]*href="mailto:ads@blockclubchi\.org"[^>]*>[\s\S]*?<\/a>/g;
+  const TEMPLATE_AD_BLOCK_REGEX = /<a target="_blank"[^>]*>[\s\S]*?cbc69502-35fb-4e20-83c2-c5ab9e010862[\s\S]*?<\/a>/g;
   html = html.replace(TEMPLATE_AD_BLOCK_REGEX, (match) => {
     const wrapped = `<!-- AD-SLOT-TEMPLATE-${templateAdIdx}-START -->${match}<!-- AD-SLOT-TEMPLATE-${templateAdIdx}-END -->`;
     templateAdIdx++;

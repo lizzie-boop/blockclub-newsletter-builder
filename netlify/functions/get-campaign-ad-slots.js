@@ -25,7 +25,9 @@ async function acGet(baseUrl, apiKey, path) {
 function describeSlotContent(inner) {
   const trimmed = inner.trim();
   if (!trimmed) return 'Empty';
-  if (/mailto:ads@blockclubchi\.org/i.test(trimmed)) return 'Currently: Block Club house ad';
+  if (/mailto:ads@blockclubchi\.org/i.test(trimmed) || /cbc69502-35fb-4e20-83c2-c5ab9e010862/i.test(trimmed)) {
+    return 'Currently: Block Club house ad';
+  }
   const advertiserMatch = trimmed.match(/<!--\s*AD-ADVERTISER:\s*(.*?)\s*-->/i);
   if (advertiserMatch) return `Currently: ad for ${advertiserMatch[1]}`;
   return 'Currently: existing content';
